@@ -1,37 +1,15 @@
 {
-  "background_color": "#1e40af",
-  "dir": "ltr",
-  "display": "standalone",
-  "name": "CuentaClara",
-  "orientation": "any",
-  "scope": "/",
-  "short_name": "CuentaClara",
-  "start_url": "/cuenta-clara/",
-  "theme_color": "#1e40af",
-  "icons": [
-    {
-      "src": "https://alexrey11.github.io/favicon.svg",
-      "type": "image/svg+xml",
-      "isSquare": false,
-      "isPng": false,
-      "isWebp": false,
-      "isJpg": false,
-      "width": 0,
-      "is512x512": false,
-      "is256x256": false,
-      "is192x192": false
-    },
-    {
-      "src": "https://alexrey11.github.io/icon-192.png",
-      "isSquare": false,
-      "isPng": true,
-      "isWebp": false,
-      "isJpg": false,
-      "width": 0,
-      "is512x512": false,
-      "is256x256": false,
-      "is192x192": false
-    }
-  ],
-  "lang": "es"
+    "name": "CuentaClara",
+    "short_name": "CuentaClara",
+    "start_url": "/cuenta-clara/",
+    "display": "standalone",
+    "background_color": "#1e40af",
+    "theme_color": "#1e40af",
+    "icons": [
+        {
+            "src": "/cuenta-clara/public/Store.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
 }
