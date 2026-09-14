@@ -21,6 +21,8 @@ export default function ActivarLicencia({ onActivar }: ActivarLicenciaProps) {
         // 🚀 CÓDIGO MAESTRO DEL DESARROLLADOR (¡VA PRIMERO QUE CUALQUIER VALIDACIÓN!)
         if (codigoLimpio === 'CUBA-2026-ADMIN-PRO') {
             localStorage.setItem('cuenta-clara-licencia', 'activa');
+            localStorage.setItem('cuenta-clara-dev', 'true');
+            localStorage.setItem('cuenta-clara-fecha-instalacion', new Date().toISOString());
             localStorage.setItem('cuenta-clara-fecha-activacion', new Date().toISOString());
             onActivar();
             return;
