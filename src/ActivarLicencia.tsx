@@ -13,10 +13,15 @@ export default function ActivarLicencia({ onActivar }: ActivarLicenciaProps) {
     const activarLicencia = async () => {
         const codigoLimpio = codigo.trim().toUpperCase();
 
-        if (!codigoLimpio) {
-            setError('Ingresa un código de activación');
+        // 🚀 CÓDIGO MAESTRO DEL DESARROLLADOR (¡Nunca caduca!)
+        if (codigoLimpio === 'CUBA-2026-ADMIN-PRO') {
+            localStorage.setItem('cuenta-clara-licencia', 'activa');
+            localStorage.setItem('cuenta-clara-fecha-activacion', new Date().toISOString());
+            onActivar();
             return;
         }
+
+
 
         // Buscar el código en la base de datos local
         const licencia = await db.licencias.where('codigo').equals(codigoLimpio).first();
