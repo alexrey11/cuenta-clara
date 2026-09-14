@@ -17,14 +17,14 @@ import {
     Filler
 } from 'chart.js';
 
+
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler);
 
 interface DashboardProps {
     onVolver: () => void;
     usuarioActual: Usuario;
 }
-
-export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps) {
+export default function Dashboard({ onVolver }: DashboardProps) {
     const [ventas, setVentas] = useState<Venta[]>([]);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [filtroFecha, setFiltroFecha] = useState<'hoy' | 'semana' | 'mes' | 'todo'>('semana');
@@ -64,6 +64,20 @@ export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps
     const ticketPromedio = ventas.length > 0 ? totalGeneral / ventas.length : 0;
     const productosBajoStock = productos.filter(p => p.stockActual <= p.stockMinimo);
 
+    // Calcular ganancia total
+    const gananciaTotal = ventas.reduce((sum, v) => {
+        const items = v.items && v.items.length > 0
+            ? v.items
+            : [{ precioUnitario: v.precioUnitario || v.total, precioCompra: 0, cantidad: v.cantidad || 1, subtotal: v.total }];
+
+        const gananciaVenta = items.reduce((s, item) => {
+            return s + ((item.precioUnitario - (item.precioCompra || 0)) * item.cantidad);
+        }, 0);
+
+        return sum + gananciaVenta;
+    }, 0);
+
+    // Datos para gráfico de líneas (ventas por día)
     const ventasPorDia = () => {
         const dias: Record<string, number> = {};
         ventas.forEach(v => {
@@ -83,11 +97,20 @@ export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps
         };
     };
 
+    // Top 5 productos (desde items del carrito)
     const topProductos = () => {
         const stats = new Map<string, number>();
+
         ventas.forEach(v => {
-            stats.set(v.productoNombre, (stats.get(v.productoNombre) || 0) + v.cantidad);
+            const items = v.items && v.items.length > 0
+                ? v.items
+                : [{ productoNombre: v.productoNombre || 'N/A', cantidad: v.cantidad || 1 }];
+
+            items.forEach(item => {
+                stats.set(item.productoNombre, (stats.get(item.productoNombre) || 0) + item.cantidad);
+            });
         });
+
         const sorted = Array.from(stats.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
         return {
             labels: sorted.map(s => s[0]),
@@ -105,6 +128,7 @@ export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps
         };
     };
 
+    // Métodos de pago
     const metodosPago = () => {
         const metodos: Record<string, number> = { efectivo: 0, transferencia: 0, tarjeta: 0, fiado: 0 };
         ventas.forEach(v => {
@@ -169,31 +193,37 @@ export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps
                 </div>
 
                 {/* KPIs */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6">
                     <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-2xl shadow-md">
                         <p className="text-sm opacity-90 mb-2">💰 Total Vendido</p>
-                        <p className="text-4xl font-bold">${totalGeneral.toFixed(2)}</p>
+                        <p className="text-3xl font-bold">${totalGeneral.toFixed(2)}</p>
                         <p className="text-sm opacity-90 mt-2">{ventas.length} ventas</p>
                     </div>
                     <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-6 rounded-2xl shadow-md">
-                        <p className="text-sm opacity-90 mb-2">🎫 Ticket Promedio</p>
-                        <p className="text-4xl font-bold">${ticketPromedio.toFixed(2)}</p>
-                        <p className="text-sm opacity-90 mt-2">Por venta</p>
+                        <p className="text-sm opacity-90 mb-2">📈 Ganancia Neta</p>
+                        <p className="text-3xl font-bold">${gananciaTotal.toFixed(2)}</p>
+                        <p className="text-sm opacity-90 mt-2">Beneficio real</p>
                     </div>
                     <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-6 rounded-2xl shadow-md">
+                        <p className="text-sm opacity-90 mb-2">🎫 Ticket Promedio</p>
+                        <p className="text-3xl font-bold">${ticketPromedio.toFixed(2)}</p>
+                        <p className="text-sm opacity-90 mt-2">Por venta</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-white p-6 rounded-2xl shadow-md">
                         <p className="text-sm opacity-90 mb-2">📦 Productos</p>
-                        <p className="text-4xl font-bold">{productos.length}</p>
+                        <p className="text-3xl font-bold">{productos.length}</p>
                         <p className="text-sm opacity-90 mt-2">En inventario</p>
                     </div>
                     <div className="bg-gradient-to-br from-red-500 to-red-600 text-white p-6 rounded-2xl shadow-md">
                         <p className="text-sm opacity-90 mb-2">⚠️ Stock Bajo</p>
-                        <p className="text-4xl font-bold">{productosBajoStock.length}</p>
+                        <p className="text-3xl font-bold">{productosBajoStock.length}</p>
                         <p className="text-sm opacity-90 mt-2">Productos críticos</p>
                     </div>
                 </div>
 
                 {/* Gráficos */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    {/* Ventas por día */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                         <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">📈 Ventas por Día</h2>
                         <div className="h-64">
@@ -201,6 +231,7 @@ export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps
                         </div>
                     </div>
 
+                    {/* Top productos */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                         <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">🏆 Top 5 Productos</h2>
                         <div className="h-64">
@@ -210,6 +241,7 @@ export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Métodos de pago */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                         <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">💳 Métodos de Pago</h2>
                         <div className="h-64 flex items-center justify-center">
@@ -217,6 +249,7 @@ export default function Dashboard({ onVolver, usuarioActual: _ }: DashboardProps
                         </div>
                     </div>
 
+                    {/* Productos críticos */}
                     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
                         <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">⚠️ Productos con Stock Bajo</h2>
                         {productosBajoStock.length === 0 ? (

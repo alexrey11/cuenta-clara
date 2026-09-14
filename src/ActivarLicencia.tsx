@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { db } from './db';
+import { LICENCIAS_SECRETAS } from './db';
+
 
 interface ActivarLicenciaProps {
     onActivar: () => void;
@@ -10,6 +11,7 @@ export default function ActivarLicencia({ onActivar }: ActivarLicenciaProps) {
     const [mostrarInfo, setMostrarInfo] = useState(false);
     const [error, setError] = useState('');
 
+
     const activarLicencia = async () => {
         const codigoLimpio = codigo.trim().toUpperCase();
 
@@ -18,37 +20,49 @@ export default function ActivarLicencia({ onActivar }: ActivarLicenciaProps) {
             return;
         }
 
-        // 🚀 CÓDIGO MAESTRO DEL DESARROLLADOR (¡VA PRIMERO QUE CUALQUIER VALIDACIÓN!)
-        if (codigoLimpio === 'CUBA-2026-ADMIN-PRO') {
+        // 🚀 CÓDIGO MAESTRO DEL DESARROLLADOR (acceso ilimitado)
+        if (codigoLimpio === 'CUBA-2024-ADMIN-PRO') {
             localStorage.setItem('cuenta-clara-licencia', 'activa');
             localStorage.setItem('cuenta-clara-dev', 'true');
             localStorage.setItem('cuenta-clara-fecha-instalacion', new Date().toISOString());
             localStorage.setItem('cuenta-clara-fecha-activacion', new Date().toISOString());
+            localStorage.setItem('cuenta-clara-licencia-permanente', 'true');
             onActivar();
             return;
         }
 
-        // Validación de formato para códigos normales de clientes
-        if (!codigoLimpio.startsWith('CC-') || codigoLimpio.length !== 23) {
-            setError('Código inválido. Debe tener el formato: CC-XXXX-XXXX-XXXX-XXXX');
-            return;
-        }
+        // Buscar el código en las licencias secretas
+        const licenciaSecreta = LICENCIAS_SECRETAS.find(l => l.codigo === codigoLimpio);
 
-        // Buscar el código en la base de datos local
-        const licencia = await db.licencias.where('codigo').equals(codigoLimpio).first();
-
-        if (licencia) {
-            await db.licencias.update(licencia.id!, {
-                estado: 'activada',
-                fechaActivacion: new Date()
-            });
-
-            localStorage.setItem('cuenta-clara-licencia', 'activa');
-            localStorage.setItem('cuenta-clara-fecha-activacion', new Date().toISOString());
-            onActivar();
-        } else {
+        if (!licenciaSecreta) {
             setError('Código inválido. Verifica que esté bien escrito.');
+            return;
         }
+
+        if (licenciaSecreta.estado === 'activada') {
+            setError('Este código ya fue utilizado. Contacta al administrador para obtener uno nuevo.');
+            return;
+        }
+
+        // Activar licencia por 60 días
+        const fechaActivacion = new Date();
+        const fechaVencimiento = new Date(fechaActivacion);
+        fechaVencimiento.setDate(fechaVencimiento.getDate() + 60);
+
+        // Guardar en localStorage
+        localStorage.setItem('cuenta-clara-licencia', 'activa');
+        localStorage.setItem('cuenta-clara-fecha-activacion', fechaActivacion.toISOString());
+        localStorage.setItem('cuenta-clara-fecha-vencimiento', fechaVencimiento.toISOString());
+        localStorage.setItem('cuenta-clara-codigo-licencia', codigoLimpio);
+
+        // Marcar la licencia como usada en el array (solo en memoria, no persistente)
+        licenciaSecreta.estado = 'activada';
+        licenciaSecreta.fechaActivacion = fechaActivacion;
+        licenciaSecreta.fechaVencimiento = fechaVencimiento;
+
+
+
+        onActivar();
     };
 
     return (
@@ -63,7 +77,7 @@ export default function ActivarLicencia({ onActivar }: ActivarLicenciaProps) {
                     <>
                         <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-6">
                             <p className="text-sm text-blue-800 dark:text-blue-400">
-                                <strong>🎉 ¡Prueba gratis de 15 días!</strong><br />
+                                <strong>🎉 ¡Bienvenido a CuentaClara!</strong><br />
                                 Tu período de prueba ha terminado. Activa tu licencia para seguir usando todas las funciones.
                             </p>
                         </div>
@@ -104,33 +118,39 @@ export default function ActivarLicencia({ onActivar }: ActivarLicenciaProps) {
                 ) : (
                     <>
                         <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-6 rounded-lg mb-6">
-                            <h3 className="font-bold text-lg mb-3 text-green-800 dark:text-green-400">💳 Planes Disponibles</h3>
+                            <h3 className="font-bold text-lg mb-3 text-green-800 dark:text-green-400">💳 Licencia de Uso</h3>
 
-                            <div className="space-y-3">
-                                <div className="bg-white dark:bg-gray-700 p-4 rounded-lg border border-green-200 dark:border-green-800">
-                                    <p className="font-semibold text-green-700 dark:text-green-400">Plan Mensual</p>
-                                    <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">500 CUP<span className="text-sm font-normal text-gray-500 dark:text-gray-400">/mes</span></p>
-                                </div>
-
-                                <div className="bg-white dark:bg-gray-700 p-4 rounded-lg border-2 border-green-500 dark:border-green-600 relative">
-                                    <span className="absolute -top-3 left-4 bg-green-500 text-white text-xs px-2 py-1 rounded-full">Popular</span>
-                                    <p className="font-semibold text-green-700 dark:text-green-400">Plan Anual</p>
-                                    <p className="text-2xl font-bold text-gray-800 dark:text-gray-200">5,000 CUP<span className="text-sm font-normal text-gray-500 dark:text-gray-400">/año</span></p>
-                                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">¡Ahorra 1,000 CUP!</p>
-                                </div>
+                            <div className="bg-white dark:bg-gray-700 p-4 rounded-lg border-2 border-green-500 dark:border-green-600 relative">
+                                <span className="absolute -top-3 left-4 bg-green-500 text-white text-xs px-2 py-1 rounded-full">60 días</span>
+                                <p className="font-semibold text-green-700 dark:text-green-400">Licencia Completa</p>
+                                <p className="text-2xl font-bold text-gray-800 dark:text-gray-200 mt-2">Acceso Total</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Todas las funciones incluidas</p>
                             </div>
                         </div>
 
                         <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg mb-6">
-                            <h4 className="font-semibold mb-2 text-yellow-800 dark:text-yellow-400">📱 Cómo pagar:</h4>
+                            <h4 className="font-semibold mb-2 text-yellow-800 dark:text-yellow-400">📱 Cómo obtener tu licencia:</h4>
                             <ol className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-                                <li>1. Transfiere el monto por <strong>EnZona</strong> o <strong>Transfermóvil</strong></li>
-                                <li>2. Envía el comprobante por WhatsApp al:</li>
+                                <li>1. Contacta al administrador por WhatsApp:</li>
                                 <li className="pl-4 font-mono bg-white dark:bg-gray-700 p-2 rounded text-center font-bold text-blue-600 dark:text-blue-400">
                                     +53 55501545
                                 </li>
-                                <li>3. Recibirás tu código de activación en minutos</li>
+                                <li>2. Negocia el precio y realiza el pago</li>
+                                <li>3. Recibirás tu código de activación único</li>
+                                <li>4. Ingresa el código aquí y disfruta de acceso completo</li>
                             </ol>
+                        </div>
+
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-6">
+                            <h4 className="font-semibold mb-2 text-blue-800 dark:text-blue-400">✨ ¿Qué incluye?</h4>
+                            <ul className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                                <li>✅ Ventas ilimitadas</li>
+                                <li>✅ Gestión de inventario completa</li>
+                                <li>✅ Clientes y fiados</li>
+                                <li>✅ Reportes profesionales</li>
+                                <li>✅ Múltiples métodos de pago</li>
+                                <li>✅ 100% Offline</li>
+                            </ul>
                         </div>
 
                         <button
