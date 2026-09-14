@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Usuario } from './db';
+import type { Vista } from './types';
 import { ThemeProvider } from './ThemeContext';
 import Login from './Login';
 import WelcomeScreen from './WelcomeScreen';
@@ -21,10 +22,9 @@ import Comisiones from './Comisiones';
 import MovimientosInventario from './MovimientosInventario';
 import Configuracion from './Configuracion';
 
-
 function App() {
   const [usuarioActual, setUsuarioActual] = useState<Usuario | null>(null);
-  const [vistaActual, setVistaActual] = useState<string>('venta');
+  const [vistaActual, setVistaActual] = useState<Vista>('venta');   // ✅ tipado
   const [primeraVez, setPrimeraVez] = useState<boolean | null>(null);
   const [licenciaActiva, setLicenciaActiva] = useState(true);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<number | null>(null);
@@ -32,9 +32,8 @@ function App() {
   // Detectar primera vez
   useEffect(() => {
     const fechaInstalacion = localStorage.getItem('cuenta-clara-fecha-instalacion');
-    const usuariosCount = db.usuarios.count();
 
-    usuariosCount.then(count => {
+    db.usuarios.count().then((count) => {
       if (!fechaInstalacion && count === 0) {
         setPrimeraVez(true);
       } else {
@@ -45,35 +44,43 @@ function App() {
 
   // Verificar licencia
   useEffect(() => {
-    if (usuarioActual) {
-      const licenciaGuardada = localStorage.getItem('cuenta-clara-licencia');
-      const esDev = localStorage.getItem('cuenta-clara-dev');
-      const fechaInstalacion = localStorage.getItem('cuenta-clara-fecha-instalacion');
+    if (!usuarioActual) return;
 
-      // Si es el desarrollador o tiene licencia pagada, acceso total sin límites
-      if (licenciaGuardada === 'activa' || esDev === 'true') {
-        setLicenciaActiva(true);
-      } else if (fechaInstalacion) {
-        const diasTranscurridos = Math.floor(
-          (new Date().getTime() - new Date(fechaInstalacion).getTime()) / (1000 * 60 * 60 * 24)
-        );
-        if (diasTranscurridos <= 15) {
-          setLicenciaActiva(true);
-        } else {
-          setLicenciaActiva(false);
-        }
-      } else {
-        // Primera vez sin fecha, dar prueba gratis
-        localStorage.setItem('cuenta-clara-fecha-instalacion', new Date().toISOString());
-        setLicenciaActiva(true);
-      }
+    const licenciaGuardada = localStorage.getItem('cuenta-clara-licencia');
+    const esDev = localStorage.getItem('cuenta-clara-dev');
+    const fechaInstalacion = localStorage.getItem('cuenta-clara-fecha-instalacion');
+
+    // Dev o licencia pagada → acceso total
+    if (licenciaGuardada === 'activa' || esDev === 'true') {
+      setLicenciaActiva(true);
+      return;
     }
+
+    // Dentro del período de prueba
+    if (fechaInstalacion) {
+      const diasTranscurridos = Math.floor(
+        (Date.now() - new Date(fechaInstalacion).getTime()) / (1000 * 60 * 60 * 24)
+      );
+      setLicenciaActiva(diasTranscurridos <= 15);
+      return;
+    }
+
+    // Primera vez sin fecha → iniciar prueba
+    localStorage.setItem('cuenta-clara-fecha-instalacion', new Date().toISOString());
+    setLicenciaActiva(true);
   }, [usuarioActual]);
 
   const cerrarSesion = () => {
     setUsuarioActual(null);
     setVistaActual('venta');
     setCategoriaSeleccionada(null);
+  };
+
+  const cambiarVista = (vista: Vista) => {
+    setVistaActual(vista);
+    if (vista !== 'categorias') {
+      setCategoriaSeleccionada(null);
+    }
   };
 
   // FLUJO 1: Primera vez
@@ -98,10 +105,12 @@ function App() {
   if (!usuarioActual) {
     return (
       <ThemeProvider>
-        <Login onLogin={(usuario) => {
-          setUsuarioActual(usuario);
-          setVistaActual(usuario.rol === 'vendedor' ? 'venta' : 'dashboard');
-        }} />
+        <Login
+          onLogin={(usuario) => {
+            setUsuarioActual(usuario);
+            setVistaActual(usuario.rol === 'vendedor' ? 'venta' : 'dashboard');
+          }}
+        />
       </ThemeProvider>
     );
   }
@@ -119,7 +128,13 @@ function App() {
   const renderVista = () => {
     switch (vistaActual) {
       case 'venta':
-        return <NuevaVenta onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} onCerrarSesion={cerrarSesion} />;
+        return (
+          <NuevaVenta
+            onVolver={() => setVistaActual('dashboard')}
+            usuarioActual={usuarioActual}
+            onCerrarSesion={cerrarSesion}
+          />
+        );
 
       case 'categorias':
         if (categoriaSeleccionada) {
@@ -139,13 +154,28 @@ function App() {
         );
 
       case 'dashboard':
-        return <Dashboard onVolver={() => setVistaActual('venta')} usuarioActual={usuarioActual} />;
+        return (
+          <Dashboard
+            onVolver={() => setVistaActual('venta')}
+            usuarioActual={usuarioActual}
+          />
+        );
 
       case 'cierre':
-        return <CierreCaja onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
+        return (
+          <CierreCaja
+            onVolver={() => setVistaActual('dashboard')}
+            usuarioActual={usuarioActual}
+          />
+        );
 
       case 'usuarios':
-        return <GestionUsuarios onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
+        return (
+          <GestionUsuarios
+            onVolver={() => setVistaActual('dashboard')}
+            usuarioActual={usuarioActual}
+          />
+        );
 
       case 'licencias':
         return <Licencias usuarioActual={usuarioActual} />;
@@ -172,7 +202,12 @@ function App() {
         return <Configuracion usuarioActual={usuarioActual} />;
 
       default:
-        return <Dashboard onVolver={() => setVistaActual('venta')} usuarioActual={usuarioActual} />;
+        return (
+          <Dashboard
+            onVolver={() => setVistaActual('venta')}
+            usuarioActual={usuarioActual}
+          />
+        );
     }
   };
 
@@ -182,17 +217,10 @@ function App() {
         <Sidebar
           usuarioActual={usuarioActual}
           vistaActual={vistaActual}
-          onCambiarVista={(vista) => {
-            setVistaActual(vista);
-            if (vista !== 'categorias') {
-              setCategoriaSeleccionada(null);
-            }
-          }}
+          onCambiarVista={cambiarVista}
           onCerrarSesion={cerrarSesion}
         />
-        <div className="flex-1 ml-64">
-          {renderVista()}
-        </div>
+        <div className="flex-1 ml-64">{renderVista()}</div>
       </div>
     </ThemeProvider>
   );

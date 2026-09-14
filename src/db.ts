@@ -1,6 +1,10 @@
 import Dexie from 'dexie';
 import type { Table } from 'dexie';
 
+// ===== TIPOS DE ROL (exportado para reutilizar en toda la app) =====
+
+export type RolUsuario = 'admin' | 'jefe' | 'vendedor';
+
 // ===== INTERFACES EXISTENTES =====
 
 export interface Categoria {
@@ -23,16 +27,16 @@ export interface Producto {
     imagen?: string;
     fechaCreacion: Date;
     fechaVencimiento?: Date;
-    codigoBarras?: string; // NUEVO: Para búsqueda avanzada
+    codigoBarras?: string;
 }
 
 export interface Usuario {
     id?: number;
     nombre: string;
     pin: string;
-    rol: 'admin' | 'vendedor';
+    rol: RolUsuario;   // ✅ usa el tipo exportado
     creadoEn: Date;
-    comisionPorcentaje?: number; // NUEVO: % de comisión para vendedores
+    comisionPorcentaje?: number;
 }
 
 // ===== INTERFACES NUEVAS =====
@@ -45,13 +49,13 @@ export interface Cliente {
     direccion?: string;
     notas?: string;
     creadoEn: Date;
-    saldoPendiente: number; // NUEVO: Total de fiados
+    saldoPendiente: number;
 }
 
 export interface TasaCambio {
     id?: number;
     moneda: 'USD' | 'EUR' | 'MLC';
-    tasa: number; // Cuántos CUP equivale 1 unidad de esta moneda
+    tasa: number;
     fechaActualizacion: Date;
     actualizadoPor: string;
 }
@@ -60,7 +64,7 @@ export interface MetodoPago {
     tipo: 'efectivo' | 'transferencia' | 'tarjeta' | 'fiado';
     monto: number;
     moneda: 'CUP' | 'USD' | 'EUR' | 'MLC';
-    montoEnCUP: number; // Convertido a CUP para el total
+    montoEnCUP: number;
 }
 
 export interface Venta {
@@ -76,14 +80,13 @@ export interface Venta {
     estado: 'completada' | 'cancelada' | 'error' | 'devuelta';
     notaCancelacion?: string;
 
-    // NUEVOS CAMPOS
     clienteId?: number;
     clienteNombre?: string;
-    metodosPago: MetodoPago[]; // Array de métodos de pago
-    notas?: string; // Notas adicionales de la venta
-    comisionVendedor?: number; // Comisión calculada
-    esFiado?: boolean; // Si es venta a crédito
-    fechaPagoFiado?: Date; // Cuando se pagó el fiado
+    metodosPago: MetodoPago[];
+    notas?: string;
+    comisionVendedor?: number;
+    esFiado?: boolean;
+    fechaPagoFiado?: Date;
 }
 
 export interface Devolucion {
@@ -149,7 +152,6 @@ export class CuentaClaraDB extends Dexie {
     cierres!: Table<CierreCaja, number>;
     licencias!: Table<Licencia, number>;
 
-    // NUEVAS TABLAS
     clientes!: Table<Cliente, number>;
     tasasCambio!: Table<TasaCambio, number>;
     devoluciones!: Table<Devolucion, number>;
@@ -158,20 +160,45 @@ export class CuentaClaraDB extends Dexie {
     constructor() {
         super('CuentaClaraDB');
 
-        this.version(7).stores({
+        // ⚠️ IMPORTANTE: mantén el esquema de versiones anteriores TAL CUAL
+        // (Dexie necesita ver todo el historial para aplicar migraciones correctamente)
+
+        this.version(6).stores({
             categorias: '++id, nombre',
             productos: '++id, categoriaId, nombre, stockActual, codigoBarras',
             ventas: '++id, productoId, fecha, vendedorId, estado, clienteId',
             usuarios: '++id, nombre, pin, rol',
             cierres: '++id, fecha, realizadoPor',
             licencias: '++id, codigo, cliente, estado',
-
-            // NUEVAS TABLAS
             clientes: '++id, nombre, telefono, saldoPendiente',
             tasasCambio: '++id, moneda',
             devoluciones: '++id, ventaId, productoId, fecha',
-            movimientosInventario: '++id, productoId, tipo, fecha'
+            movimientosInventario: '++id, productoId, tipo, fecha',
         });
+
+        // ✅ Versión 7: migración de 'Jefe' → 'jefe'
+        this.version(7)
+            .stores({
+                categorias: '++id, nombre',
+                productos: '++id, categoriaId, nombre, stockActual, codigoBarras',
+                ventas: '++id, productoId, fecha, vendedorId, estado, clienteId',
+                usuarios: '++id, nombre, pin, rol',
+                cierres: '++id, fecha, realizadoPor',
+                licencias: '++id, codigo, cliente, estado',
+                clientes: '++id, nombre, telefono, saldoPendiente',
+                tasasCambio: '++id, moneda',
+                devoluciones: '++id, ventaId, productoId, fecha',
+                movimientosInventario: '++id, productoId, tipo, fecha',
+            })
+            .upgrade(async (tx) => {
+                // Normaliza el rol antiguo 'Jefe' a 'jefe' en todos los usuarios
+                await tx
+                    .table('usuarios')
+                    .toCollection()
+                    .modify((u: any) => {
+                        if (u.rol === 'Jefe') u.rol = 'jefe';
+                    });
+            });
     }
 }
 
@@ -179,20 +206,22 @@ export const db = new CuentaClaraDB();
 
 // ===== FUNCIONES AUXILIARES =====
 
-// Obtener tasa de cambio actual
-export const obtenerTasaCambio = async (moneda: 'USD' | 'EUR' | 'MLC'): Promise<number> => {
+export const obtenerTasaCambio = async (
+    moneda: 'USD' | 'EUR' | 'MLC'
+): Promise<number> => {
     const tasa = await db.tasasCambio.where('moneda').equals(moneda).first();
-    return tasa?.tasa || 1; // Si no existe, retorna 1 (por defecto)
+    return tasa?.tasa || 1;
 };
 
-// Convertir monto a CUP
-export const convertirACUP = async (monto: number, moneda: 'CUP' | 'USD' | 'EUR' | 'MLC'): Promise<number> => {
+export const convertirACUP = async (
+    monto: number,
+    moneda: 'CUP' | 'USD' | 'EUR' | 'MLC'
+): Promise<number> => {
     if (moneda === 'CUP') return monto;
     const tasa = await obtenerTasaCambio(moneda);
     return monto * tasa;
 };
 
-// Calcular comisión de vendedor
 export const calcularComision = async (venta: Venta): Promise<number> => {
     const vendedor = await db.usuarios.get(venta.vendedorId);
     if (!vendedor || !vendedor.comisionPorcentaje) return 0;
