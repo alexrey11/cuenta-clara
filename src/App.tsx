@@ -47,17 +47,25 @@ function App() {
   useEffect(() => {
     if (usuarioActual) {
       const licenciaGuardada = localStorage.getItem('cuenta-clara-licencia');
+      const esDev = localStorage.getItem('cuenta-clara-dev');
       const fechaInstalacion = localStorage.getItem('cuenta-clara-fecha-instalacion');
 
-      if (licenciaGuardada === 'activa') {
+      // Si es el desarrollador o tiene licencia pagada, acceso total sin límites
+      if (licenciaGuardada === 'activa' || esDev === 'true') {
         setLicenciaActiva(true);
       } else if (fechaInstalacion) {
         const diasTranscurridos = Math.floor(
           (new Date().getTime() - new Date(fechaInstalacion).getTime()) / (1000 * 60 * 60 * 24)
         );
-        setLicenciaActiva(diasTranscurridos <= 15);
+        if (diasTranscurridos <= 15) {
+          setLicenciaActiva(true);
+        } else {
+          setLicenciaActiva(false);
+        }
       } else {
-        setLicenciaActiva(false);
+        // Primera vez sin fecha, dar prueba gratis
+        localStorage.setItem('cuenta-clara-fecha-instalacion', new Date().toISOString());
+        setLicenciaActiva(true);
       }
     }
   }, [usuarioActual]);
