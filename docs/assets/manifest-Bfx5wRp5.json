@@ -1,0 +1,15 @@
+{
+    "name": "CuentaClara",
+    "short_name": "CuentaClara",
+    "start_url": "/cuenta-clara/",
+    "display": "standalone",
+    "background_color": "#1e40af",
+    "theme_color": "#1e40af",
+    "icons": [
+        {
+            "src": "/cuenta-clara/public/Store.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
