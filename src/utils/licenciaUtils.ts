@@ -48,8 +48,17 @@ function firma(str: string): string {
 
 /** ¿Es el código master? (solo el dev lo conoce) */
 export function esCodigoMaster(codigo: string): boolean {
-    const limpio = codigo.trim().toUpperCase().replace(/\s+/g, '');
-    return limpio === getMasterCode();
+    // Limpia: mayúsculas, quita CUALQUIER cosa que no sea letra o número
+    const limpio = codigo.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // Comparamos sin guiones (más robusto)
+    const masterLimpio = getMasterCode().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    console.log('[Master Check]', {
+        inputRecibido: codigo,
+        inputLimpio: limpio,
+        masterEsperado: masterLimpio,
+        coincide: limpio === masterLimpio,
+    });
+    return limpio === masterLimpio;
 }
 
 /** Genera un código nuevo. Solo lo usa el panel del dev. */
