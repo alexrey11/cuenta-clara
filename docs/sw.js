@@ -1,8 +1,12 @@
-const CACHE_NAME = 'cuenta-clara-v1';
+const CACHE_NAME = 'cuenta-clara-v2';
+const BASE_URL = '/cuenta-clara';
+
 const urlsToCache = [
-    '/',
-    '/index.html',
-    '/manifest.json'
+    `${BASE_URL}/`,
+    `${BASE_URL}/index.html`,
+    `${BASE_URL}/manifest.json`,
+    `${BASE_URL}/icon-192.png`,
+    `${BASE_URL}/icon-512.png`
 ];
 
 self.addEventListener('install', event => {
