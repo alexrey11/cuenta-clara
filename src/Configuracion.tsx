@@ -246,7 +246,7 @@ export default function Configuracion({ usuarioActual: _ }: ConfiguracionProps) 
                     <div className="cc-fade-up rounded-2xl border border-rose-400/25 bg-rose-500/5 p-4 shadow-lg shadow-black/30 md:p-6">
                         <h2 className="mb-2 text-base font-bold text-rose-300 md:text-lg">⚠️ Borrar Datos de Negocio</h2>
                         <p className="mb-3 text-xs text-gray-400 md:text-sm">
-                            Borra productos, ventas, clientes, etc. <strong className="text-rose-200">No toca usuarios ni licencia.</strong>
+                            Borra productos, ventas, clientes, etc.
                         </p>
                         <button onClick={borrarTodo}
                             className={`w-full rounded-xl py-3 text-sm font-bold transition-all duration-150 md:text-base ${confirmarBorrar
@@ -266,7 +266,7 @@ export default function Configuracion({ usuarioActual: _ }: ConfiguracionProps) 
                     <div className="cc-fade-up rounded-2xl border border-violet-400/25 bg-violet-500/5 p-4 shadow-lg shadow-black/30 md:p-6">
                         <h2 className="mb-2 text-base font-bold text-violet-300 md:text-lg">🛠️ Reset Total (Desarrollo)</h2>
                         <p className="mb-3 text-xs text-gray-400 md:text-sm">
-                            Borra <strong className="text-violet-200">TODO</strong>: base de datos, trial, licencia y localStorage. La app quedará como recién instalada (verás el WelcomeScreen de nuevo). Útil para probar el flujo completo.
+                            Borra <strong className="text-violet-200">TODO</strong>: base de datos, trial, licencia y localStorage. La app quedará como recién instalada
                         </p>
                         <button onClick={resetTotal}
                             disabled={reseteando}
@@ -292,7 +292,7 @@ export default function Configuracion({ usuarioActual: _ }: ConfiguracionProps) 
                             <p><strong className="text-gray-200">Versión:</strong> 1.0.0</p>
                             <p><strong className="text-gray-200">Base de datos:</strong> IndexedDB (local)</p>
                             <p><strong className="text-gray-200">Modo:</strong> 100% Offline</p>
-                            <p><strong className="text-gray-200">Desarrollado por:</strong> CuentaClara</p>
+                            <p><strong className="text-gray-200">Desarrollado por:</strong> Ing. Alejandro de la Cuesta Rey</p>
                         </div>
                     </div>
                 </div>
