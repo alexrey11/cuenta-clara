@@ -1,11 +1,20 @@
+// ============ src/Comisiones.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Usuario, Venta } from './db';
+import {
+    STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
+    EmptyState,
+} from './theme';
 
+interface ComisionesProps { usuarioActual: Usuario; }
 
-interface ComisionesProps {
-    usuarioActual: Usuario;
-}
+const FILTROS = [
+    { id: 'hoy', label: 'Hoy', icon: '📅' },
+    { id: 'semana', label: 'Semana', icon: '📆' },
+    { id: 'mes', label: 'Mes', icon: '🗓️' },
+    { id: 'todo', label: 'Todo', icon: '📊' },
+] as const;
 
 export default function Comisiones({ usuarioActual: _ }: ComisionesProps) {
     const [ventas, setVentas] = useState<Venta[]>([]);
@@ -45,52 +54,72 @@ export default function Comisiones({ usuarioActual: _ }: ComisionesProps) {
     const totalComisiones = comisionesPorVendedor.reduce((s, c) => s + c.comision, 0);
 
     return (
-        <div className="p-3 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-            <div className="max-w-4xl mx-auto">
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6 mb-4 md:mb-6">
-                    <h1 className="text-xl md:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-1">💵 Comisiones</h1>
-                    <p className="text-xs md:text-base text-gray-600 dark:text-gray-400">Comisiones por vendedor</p>
-                </div>
+        <div className={pageWrap}>
+            <style>{STYLES}</style>
+            <BackgroundBlobs />
 
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-3 md:p-4 mb-4 md:mb-6">
-                    <div className="flex gap-2 flex-wrap">
-                        {(['hoy', 'semana', 'mes', 'todo'] as const).map(f => (
-                            <button key={f} onClick={() => setFiltroFecha(f)}
-                                className={`px-3 md:px-4 py-2 rounded-lg font-semibold transition-colors text-sm md:text-base ${filtroFecha === f ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                                    }`}>
-                                {f === 'hoy' ? '📅 Hoy' : f === 'semana' ? '📆 Semana' : f === 'mes' ? '🗓️ Mes' : '📊 Todo'}
-                            </button>
-                        ))}
+            <div className="relative mx-auto max-w-4xl">
+                <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
+                    <div className="flex items-center gap-3">
+                        <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">💵</div>
+                        <div className="min-w-0">
+                            <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Comisiones</h1>
+                            <p className="truncate text-xs text-gray-400 md:text-sm">Comisiones por vendedor</p>
+                        </div>
                     </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-4 md:p-6 rounded-xl md:rounded-2xl shadow-md mb-4 md:mb-6">
-                    <p className="text-xs md:text-sm opacity-90 mb-1">💰 Total Comisiones</p>
-                    <p className="text-2xl md:text-3xl font-bold">${totalComisiones.toFixed(2)}</p>
-                    <p className="text-xs opacity-90 mt-1">{comisionesPorVendedor.length} vendedores</p>
+                <div className={`cc-fade-up mb-4 md:mb-6 ${card} p-3 md:p-4`}>
+                    <div className="flex flex-wrap gap-2">
+                        {FILTROS.map((f) => {
+                            const activo = filtroFecha === f.id;
+                            return (
+                                <button key={f.id} onClick={() => setFiltroFecha(f.id)}
+                                    className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-colors duration-150 md:px-4 md:text-base ${activo
+                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25'
+                                        : 'border border-white/10 bg-slate-800/50 text-gray-300 hover:border-blue-400/40 hover:bg-slate-800/80'
+                                        }`}>
+                                    <span>{f.icon}</span><span>{f.label}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
-                <div className="space-y-2 md:space-y-3">
-                    {comisionesPorVendedor.map((c, idx) => (
-                        <div key={idx} className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl md:rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                            <div className="flex justify-between items-start">
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm md:text-lg truncate">{c.usuario.nombre}</h3>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                        {c.usuario.comisionPorcentaje}% comisión • {c.cantidadVentas} ventas
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                        Ventas: ${c.totalVentas.toFixed(2)}
-                                    </p>
-                                </div>
-                                <div className="text-right ml-2 flex-shrink-0">
-                                    <p className="text-xl md:text-2xl font-bold text-green-600 dark:text-green-400">${c.comision.toFixed(2)}</p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">Comisión</p>
+                <div className={`${card} cc-fade-up mb-4 p-4 md:mb-6 md:p-6`}>
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-md ring-2 ring-white/10">💰</span>
+                        <div>
+                            <p className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">Total Comisiones</p>
+                            <p className="text-2xl font-black text-emerald-300 md:text-3xl">${totalComisiones.toFixed(2)}</p>
+                            <p className="mt-0.5 text-xs text-gray-500">{comisionesPorVendedor.length} vendedores</p>
+                        </div>
+                    </div>
+                </div>
+
+                {comisionesPorVendedor.length === 0 ? (
+                    <div className={`${card} p-6`}><EmptyState icon="💵" texto="Sin comisiones en este período" /></div>
+                ) : (
+                    <div className="space-y-2 md:space-y-3">
+                        {comisionesPorVendedor.map((c, idx) => (
+                            <div key={idx} className={`${card} cc-fade-up p-3 md:p-4`}>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                        <h3 className="truncate text-sm font-bold text-gray-100 md:text-lg">{c.usuario.nombre}</h3>
+                                        <p className="text-xs text-gray-400">
+                                            {c.usuario.comisionPorcentaje}% comisión · {c.cantidadVentas} ventas
+                                        </p>
+                                        <p className="text-xs text-gray-500">Ventas: ${c.totalVentas.toFixed(2)}</p>
+                                    </div>
+                                    <div className="shrink-0 text-right">
+                                        <p className="text-xl font-black text-emerald-300 md:text-2xl">${c.comision.toFixed(2)}</p>
+                                        <p className="text-xs text-gray-500">Comisión</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     );

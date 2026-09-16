@@ -1,11 +1,23 @@
+// ============ src/HistorialVentas.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Venta, Usuario } from './db';
 import jsPDF from 'jspdf';
+import {
+    STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
+    input, sectionTitle, filterPill,
+    modalOverlay, modalPanel, modalHeader, modalTitle, modalClose,
+    MetricCard, EmptyState,
+} from './theme';
 
-interface HistorialVentasProps {
-    usuarioActual: Usuario;
-}
+interface HistorialVentasProps { usuarioActual: Usuario; }
+
+const FILTROS = [
+    { id: 'hoy', label: 'Hoy', icon: '📅' },
+    { id: 'semana', label: 'Semana', icon: '📆' },
+    { id: 'mes', label: 'Mes', icon: '🗓️' },
+    { id: 'todo', label: 'Todo', icon: '📊' },
+] as const;
 
 export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasProps) {
     const [ventas, setVentas] = useState<Venta[]>([]);
@@ -15,9 +27,7 @@ export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasPro
     const [ventaSeleccionada, setVentaSeleccionada] = useState<Venta | null>(null);
     const [vendedores, setVendedores] = useState<string[]>([]);
 
-    useEffect(() => {
-        cargarDatos();
-    }, [filtroFecha, filtroVendedor]);
+    useEffect(() => { cargarDatos(); }, [filtroFecha, filtroVendedor]);
 
     const cargarDatos = async () => {
         const todasVentas = await db.ventas.toArray();
@@ -35,7 +45,7 @@ export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasPro
         if (busqueda) {
             const b = busqueda.toLowerCase();
             ventasFiltradas = ventasFiltradas.filter(v => {
-                const items = v.items && v.items.length > 0 ? v.items : [];
+                const items = v.items || [];
                 return items.some(i => i.productoNombre.toLowerCase().includes(b) || (i.codigoBarras && i.codigoBarras.includes(b))) ||
                     (v.clienteNombre && v.clienteNombre.toLowerCase().includes(b)) ||
                     v.vendedorNombre.toLowerCase().includes(b);
@@ -54,6 +64,8 @@ export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasPro
         const items = getItemsVenta(v);
         return s + items.reduce((sum, i) => sum + ((i.precioUnitario - (i.precioCompra || 0)) * i.cantidad), 0);
     }, 0);
+    const ticketProm = ventas.length > 0 ? totalVentas / ventas.length : 0;
+    const totalVuelto = ventas.reduce((s, v) => s + (v.vueltoCUP || 0), 0);
 
     const exportarCSV = () => {
         let csv = 'Fecha,Hora,Vendedor,Cliente,Producto,Cod.Barras,Cantidad,P.Unitario,Subtotal,Total,Metodo Pago,Vuelto,Estado\n';
@@ -74,10 +86,8 @@ export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasPro
 
     const exportarPDF = () => {
         const doc = new jsPDF();
-        doc.setFontSize(16);
-        doc.text('Historial de Ventas', 105, 20, { align: 'center' });
-        doc.setFontSize(9);
-        doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 105, 28, { align: 'center' });
+        doc.setFontSize(16); doc.text('Historial de Ventas', 105, 20, { align: 'center' });
+        doc.setFontSize(9); doc.text(`Generado: ${new Date().toLocaleString('es-ES')}`, 105, 28, { align: 'center' });
         let y = 40;
         ventas.forEach((v, idx) => {
             if (y > 260) { doc.addPage(); y = 20; }
@@ -97,69 +107,62 @@ export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasPro
     };
 
     return (
-        <div className="p-3 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-            <div className="max-w-7xl mx-auto">
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6 mb-4 md:mb-6">
-                    <h1 className="text-xl md:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-1">📜 Historial Ventas</h1>
-                    <p className="text-xs md:text-base text-gray-600 dark:text-gray-400">Registro completo con detalle</p>
-                </div>
+        <div className={pageWrap}>
+            <style>{STYLES}</style>
+            <BackgroundBlobs />
 
-                {/* KPIs */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-6 mb-4 md:mb-6">
-                    <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-3 md:p-6 rounded-xl md:rounded-2xl shadow-md">
-                        <p className="text-xs md:text-sm opacity-90">💰 Total</p>
-                        <p className="text-lg md:text-3xl font-bold truncate">${totalVentas.toFixed(0)}</p>
-                        <p className="text-xs opacity-75 mt-1 hidden md:block">{ventas.length} ventas</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white p-3 md:p-6 rounded-xl md:rounded-2xl shadow-md">
-                        <p className="text-xs md:text-sm opacity-90">📈 Ganancia</p>
-                        <p className="text-lg md:text-3xl font-bold truncate">${totalGanancia.toFixed(0)}</p>
-                        <p className="text-xs opacity-75 mt-1 hidden md:block">Neto</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white p-3 md:p-6 rounded-xl md:rounded-2xl shadow-md">
-                        <p className="text-xs md:text-sm opacity-90">🎫 Ticket</p>
-                        <p className="text-lg md:text-3xl font-bold truncate">${ventas.length > 0 ? (totalVentas / ventas.length).toFixed(0) : '0'}</p>
-                        <p className="text-xs opacity-75 mt-1 hidden md:block">Promedio</p>
-                    </div>
-                    <div className="bg-gradient-to-br from-orange-500 to-orange-600 text-white p-3 md:p-6 rounded-xl md:rounded-2xl shadow-md">
-                        <p className="text-xs md:text-sm opacity-90">💵 Vuelto</p>
-                        <p className="text-lg md:text-3xl font-bold truncate">${ventas.reduce((s, v) => s + (v.vueltoCUP || 0), 0).toFixed(0)}</p>
-                        <p className="text-xs opacity-75 mt-1 hidden md:block">Devuelto</p>
+            <div className="relative mx-auto max-w-7xl">
+                <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
+                    <div className="flex items-center gap-3">
+                        <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">📜</div>
+                        <div className="min-w-0">
+                            <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Historial Ventas</h1>
+                            <p className="truncate text-xs text-gray-400 md:text-sm">Registro completo con detalle</p>
+                        </div>
                     </div>
                 </div>
 
-                {/* Filtros */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-3 md:p-6 mb-4 md:mb-6">
-                    <h2 className="text-sm md:text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200">🔍 Filtros</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <select value={filtroFecha} onChange={(e) => setFiltroFecha(e.target.value as any)}
-                            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2.5 text-sm md:text-base">
-                            <option value="hoy">📅 Hoy</option>
-                            <option value="semana">📆 Semana</option>
-                            <option value="mes">🗓️ Mes</option>
-                            <option value="todo">📊 Todo</option>
-                        </select>
-                        <select value={filtroVendedor} onChange={(e) => setFiltroVendedor(e.target.value)}
-                            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2.5 text-sm md:text-base">
-                            <option value="todos">Todos vendedores</option>
+                <div className="mb-4 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-4 md:gap-4">
+                    <MetricCard icon="💰" label="Total" value={`$${totalVentas.toFixed(0)}`} sub={`${ventas.length} ventas`} tile="from-emerald-500 to-teal-600" />
+                    <MetricCard icon="📈" label="Ganancia" value={`$${totalGanancia.toFixed(0)}`} sub="Neto" tile="from-blue-500 to-indigo-600" />
+                    <MetricCard icon="🎫" label="Ticket" value={`$${ticketProm.toFixed(0)}`} sub="Promedio" tile="from-violet-500 to-purple-600" />
+                    <MetricCard icon="💵" label="Vuelto" value={`$${totalVuelto.toFixed(0)}`} sub="Devuelto" tile="from-orange-500 to-red-600" />
+                </div>
+
+                <div className={`${card} cc-fade-up mb-4 p-3 md:mb-6 md:p-5`}>
+                    <h2 className={`${sectionTitle} mb-3`}>🔍 Filtros</h2>
+                    <div className="mb-3 flex flex-wrap gap-2">
+                        {FILTROS.map((f) => (
+                            <button key={f.id} onClick={() => setFiltroFecha(f.id)} className={filterPill(filtroFecha === f.id)}>
+                                <span>{f.icon}</span><span>{f.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <select value={filtroVendedor} onChange={(e) => setFiltroVendedor(e.target.value)} className={input}>
+                            <option value="todos">Todos los vendedores</option>
                             {vendedores.map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
-                        <input type="text" placeholder="Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                            className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2.5 text-sm md:text-base" />
+                        <input type="text" placeholder="🔍 Buscar producto, cliente, vendedor..." value={busqueda}
+                            onChange={(e) => setBusqueda(e.target.value)} className={input} />
                     </div>
                 </div>
 
-                {/* Botones */}
-                <div className="flex gap-2 md:gap-3 mb-4 md:mb-6">
-                    <button onClick={exportarPDF} className="flex-1 md:flex-none bg-red-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl hover:bg-red-700 font-semibold text-sm md:text-base shadow-md">📄 PDF</button>
-                    <button onClick={exportarCSV} className="flex-1 md:flex-none bg-green-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl hover:bg-green-700 font-semibold text-sm md:text-base shadow-md">📊 CSV</button>
+                <div className="mb-4 flex gap-2 md:mb-6 md:gap-3">
+                    <button onClick={exportarPDF}
+                        className="flex-1 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-rose-500/25 transition-transform hover:-translate-y-0.5 md:flex-none md:px-6 md:py-3 md:text-base">
+                        📄 PDF
+                    </button>
+                    <button onClick={exportarCSV}
+                        className="flex-1 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-500/25 transition-transform hover:-translate-y-0.5 md:flex-none md:px-6 md:py-3 md:text-base">
+                        📊 CSV
+                    </button>
                 </div>
 
-                {/* Lista */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-3 md:p-6">
-                    <h2 className="text-base md:text-xl font-semibold mb-3 md:mb-4 text-gray-800 dark:text-gray-200">Ventas ({ventas.length})</h2>
+                <div className={`${card} cc-fade-up p-3 md:p-6`}>
+                    <h2 className={`${sectionTitle} mb-3 md:mb-4`}>Ventas ({ventas.length})</h2>
                     {ventas.length === 0 ? (
-                        <p className="text-gray-500 dark:text-gray-400 text-center py-8 md:py-12 text-sm md:text-base">Sin ventas</p>
+                        <EmptyState icon="📭" texto="Sin ventas en este período" />
                     ) : (
                         <div className="space-y-2 md:space-y-3">
                             {ventas.map((venta) => {
@@ -167,34 +170,34 @@ export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasPro
                                 const fecha = new Date(venta.fecha);
                                 return (
                                     <div key={venta.id} onClick={() => setVentaSeleccionada(venta)}
-                                        className="bg-gray-50 dark:bg-gray-700 p-3 md:p-4 rounded-lg md:rounded-xl border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow cursor-pointer">
-                                        <div className="flex justify-between items-start gap-2">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1">
+                                        className="cursor-pointer rounded-xl border border-white/10 bg-slate-800/50 p-3 transition-colors duration-150 hover:border-blue-400/30 hover:bg-slate-800/80 md:p-4">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="mb-1 flex items-center gap-2">
                                                     <span className="text-lg md:text-2xl">🧾</span>
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="font-bold text-gray-800 dark:text-gray-200 text-sm md:text-base truncate">
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="truncate text-sm font-bold text-gray-100 md:text-base">
                                                             {fecha.toLocaleDateString('es-ES')} {fecha.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                                         </p>
-                                                        <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400 truncate">
-                                                            👤 {venta.vendedorNombre}{venta.clienteNombre && ` | ${venta.clienteNombre}`}
+                                                        <p className="truncate text-xs text-gray-400 md:text-sm">
+                                                            👤 {venta.vendedorNombre}{venta.clienteNombre && ` · ${venta.clienteNombre}`}
                                                         </p>
                                                     </div>
                                                 </div>
                                                 <div className="ml-7 md:ml-10">
-                                                    <p className="text-xs md:text-sm text-gray-700 dark:text-gray-300 truncate">
+                                                    <p className="truncate text-xs text-gray-300 md:text-sm">
                                                         {items.map(i => `${i.productoNombre} x${i.cantidad}`).join(', ')}
                                                     </p>
-                                                    <div className="flex gap-2 md:gap-4 mt-1 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
-                                                        <span>💰 <strong className="text-green-600 dark:text-green-400">${venta.total.toFixed(2)}</strong></span>
-                                                        {venta.vueltoCUP && venta.vueltoCUP > 0 && <span>💵 <strong className="text-blue-600 dark:text-blue-400">${venta.vueltoCUP.toFixed(2)}</strong></span>}
-                                                        {venta.esFiado && <span className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-2 py-0.5 rounded font-semibold">FIADO</span>}
+                                                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500 md:gap-3">
+                                                        <span>💰 <strong className="text-emerald-300">${venta.total.toFixed(2)}</strong></span>
+                                                        {venta.vueltoCUP && venta.vueltoCUP > 0 && <span>💵 <strong className="text-blue-300">${venta.vueltoCUP.toFixed(2)}</strong></span>}
+                                                        {venta.esFiado && <span className="rounded bg-amber-500/15 px-2 py-0.5 font-bold text-amber-300 ring-1 ring-amber-400/25">FIADO</span>}
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="text-right flex-shrink-0">
-                                                <p className="text-lg md:text-2xl font-bold text-green-600 dark:text-green-400">${venta.total.toFixed(0)}</p>
-                                                <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400">Ver →</p>
+                                            <div className="shrink-0 text-right">
+                                                <p className="text-lg font-black text-emerald-300 md:text-2xl">${venta.total.toFixed(0)}</p>
+                                                <p className="text-[10px] text-gray-500 md:text-xs">Ver →</p>
                                             </div>
                                         </div>
                                     </div>
@@ -204,84 +207,92 @@ export default function HistorialVentas({ usuarioActual: _ }: HistorialVentasPro
                     )}
                 </div>
 
-                {/* Modal Detalle */}
                 {ventaSeleccionada && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center p-0 md:p-4 z-50 backdrop-blur-sm">
-                        <div className="bg-white dark:bg-gray-800 rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-2xl max-h-[90vh] overflow-y-auto">
-                            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 md:px-6 py-3 md:py-4 flex justify-between items-center sticky top-0 z-10">
-                                <h2 className="text-lg md:text-xl font-bold text-white">🧾 Detalle</h2>
-                                <button onClick={() => setVentaSeleccionada(null)} className="text-white hover:text-gray-200 text-2xl">&times;</button>
+                    <div className={modalOverlay}>
+                        <div className={`${modalPanel} md:max-w-2xl`}>
+                            <div className={modalHeader}>
+                                <h2 className={modalTitle}>🧾 Detalle</h2>
+                                <button onClick={() => setVentaSeleccionada(null)} className={modalClose}>&times;</button>
                             </div>
-                            <div className="p-4 md:p-6 space-y-3 md:space-y-4">
-                                <div className="bg-gray-50 dark:bg-gray-700 p-3 md:p-4 rounded-lg md:rounded-xl">
-                                    <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2 text-sm md:text-base">📋 Info</h3>
-                                    <div className="grid grid-cols-2 gap-2 md:gap-3 text-xs md:text-sm">
-                                        <div><p className="text-gray-500 dark:text-gray-400">Fecha:</p><p className="font-semibold text-gray-800 dark:text-gray-200">{new Date(ventaSeleccionada.fecha).toLocaleDateString('es-ES')}</p></div>
-                                        <div><p className="text-gray-500 dark:text-gray-400">Hora:</p><p className="font-semibold text-gray-800 dark:text-gray-200">{new Date(ventaSeleccionada.fecha).toLocaleTimeString('es-ES')}</p></div>
-                                        <div><p className="text-gray-500 dark:text-gray-400">Vendedor:</p><p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{ventaSeleccionada.vendedorNombre}</p></div>
-                                        <div><p className="text-gray-500 dark:text-gray-400">Cliente:</p><p className="font-semibold text-gray-800 dark:text-gray-200 truncate">{ventaSeleccionada.clienteNombre || 'N/A'}</p></div>
-                                        <div><p className="text-gray-500 dark:text-gray-400">Estado:</p><p className={`font-semibold ${ventaSeleccionada.estado === 'completada' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{ventaSeleccionada.estado === 'completada' ? '✅ OK' : '⚠️ Error'}</p></div>
-                                        {ventaSeleccionada.esFiado && <div><p className="text-gray-500 dark:text-gray-400">Tipo:</p><p className="font-semibold text-yellow-600 dark:text-yellow-400">💳 FIADO</p></div>}
+                            <div className="space-y-3 p-4 md:space-y-4 md:p-6">
+                                <div className="rounded-xl border border-white/10 bg-slate-800/50 p-3 md:p-4">
+                                    <h3 className={`${sectionTitle} mb-2 text-sm md:text-base`}>📋 Información</h3>
+                                    <div className="grid grid-cols-2 gap-2 text-xs md:gap-3 md:text-sm">
+                                        <div><p className="text-gray-500">Fecha:</p><p className="font-semibold text-gray-200">{new Date(ventaSeleccionada.fecha).toLocaleDateString('es-ES')}</p></div>
+                                        <div><p className="text-gray-500">Hora:</p><p className="font-semibold text-gray-200">{new Date(ventaSeleccionada.fecha).toLocaleTimeString('es-ES')}</p></div>
+                                        <div><p className="text-gray-500">Vendedor:</p><p className="truncate font-semibold text-gray-200">{ventaSeleccionada.vendedorNombre}</p></div>
+                                        <div><p className="text-gray-500">Cliente:</p><p className="truncate font-semibold text-gray-200">{ventaSeleccionada.clienteNombre || 'N/A'}</p></div>
+                                        <div><p className="text-gray-500">Estado:</p><p className={`font-semibold ${ventaSeleccionada.estado === 'completada' ? 'text-emerald-300' : 'text-rose-300'}`}>{ventaSeleccionada.estado === 'completada' ? '✅ OK' : '⚠️ Error'}</p></div>
+                                        {ventaSeleccionada.esFiado && <div><p className="text-gray-500">Tipo:</p><p className="font-semibold text-amber-300">💳 FIADO</p></div>}
                                     </div>
                                 </div>
 
-                                <div className="bg-gray-50 dark:bg-gray-700 p-3 md:p-4 rounded-lg md:rounded-xl">
-                                    <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2 text-sm md:text-base">📦 Productos</h3>
+                                <div className="rounded-xl border border-white/10 bg-slate-800/50 p-3 md:p-4">
+                                    <h3 className={`${sectionTitle} mb-2 text-sm md:text-base`}>📦 Productos</h3>
                                     <div className="space-y-2">
                                         {getItemsVenta(ventaSeleccionada).map((item, idx) => (
-                                            <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-600 p-2 md:p-3 rounded-lg">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm truncate">{item.productoNombre}</p>
-                                                    {item.codigoBarras && <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">📊 {item.codigoBarras}</p>}
-                                                    <p className="text-xs md:text-sm text-gray-600 dark:text-gray-400">${item.precioUnitario.toFixed(2)} × {item.cantidad}</p>
+                                            <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-900/60 p-2 md:p-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-semibold text-gray-100">{item.productoNombre}</p>
+                                                    {item.codigoBarras && <p className="font-mono text-xs text-gray-500">📊 {item.codigoBarras}</p>}
+                                                    <p className="text-xs text-gray-400 md:text-sm">${item.precioUnitario.toFixed(2)} × {item.cantidad}</p>
                                                 </div>
-                                                <p className="text-base md:text-lg font-bold text-blue-600 dark:text-blue-400 ml-2">${item.subtotal.toFixed(2)}</p>
+                                                <p className="ml-2 text-base font-black text-blue-300 md:text-lg">${item.subtotal.toFixed(2)}</p>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
 
                                 {ventaSeleccionada.metodosPago && ventaSeleccionada.metodosPago.length > 0 && (
-                                    <div className="bg-gray-50 dark:bg-gray-700 p-3 md:p-4 rounded-lg md:rounded-xl">
-                                        <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-2 text-sm md:text-base">💰 Pago</h3>
+                                    <div className="rounded-xl border border-white/10 bg-slate-800/50 p-3 md:p-4">
+                                        <h3 className={`${sectionTitle} mb-2 text-sm md:text-base`}>💰 Pago</h3>
                                         <div className="space-y-2">
                                             {ventaSeleccionada.metodosPago.map((mp, idx) => (
-                                                <div key={idx} className="flex justify-between items-center bg-white dark:bg-gray-600 p-2 md:p-3 rounded-lg">
+                                                <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-900/60 p-2 md:p-3">
                                                     <div>
-                                                        <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm">
+                                                        <p className="text-sm font-semibold text-gray-100">
                                                             {mp.tipo === 'efectivo' ? '💵 Efectivo' : mp.tipo === 'transferencia' ? '📱 Transfer' : mp.tipo === 'tarjeta' ? '💳 Tarjeta' : '💳 Fiado'}
                                                         </p>
-                                                        <p className="text-xs text-gray-600 dark:text-gray-400">{mp.monto} {mp.moneda}{mp.moneda !== 'CUP' && ` (= $${mp.montoEnCUP.toFixed(2)} CUP)`}</p>
+                                                        <p className="text-xs text-gray-400">{mp.monto} {mp.moneda}{mp.moneda !== 'CUP' && ` (= $${mp.montoEnCUP.toFixed(2)} CUP)`}</p>
                                                     </div>
-                                                    <p className="text-base md:text-lg font-bold text-green-600 dark:text-green-400 ml-2">${mp.montoEnCUP.toFixed(2)}</p>
+                                                    <p className="ml-2 text-base font-black text-emerald-300 md:text-lg">${mp.montoEnCUP.toFixed(2)}</p>
                                                 </div>
                                             ))}
                                         </div>
                                     </div>
                                 )}
 
-                                <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 p-3 md:p-4 rounded-lg md:rounded-xl border-2 border-green-200 dark:border-green-800">
+                                <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-3 md:p-4">
                                     <div className="space-y-2">
-                                        <div className="flex justify-between text-base md:text-lg"><span className="font-semibold text-gray-800 dark:text-gray-200">Total:</span><span className="font-bold text-green-700 dark:text-green-400">${ventaSeleccionada.total.toFixed(2)} CUP</span></div>
+                                        <div className="flex justify-between text-base md:text-lg">
+                                            <span className="font-semibold text-gray-200">Total:</span>
+                                            <span className="font-black text-emerald-300">${ventaSeleccionada.total.toFixed(2)} CUP</span>
+                                        </div>
                                         {ventaSeleccionada.vueltoCUP && ventaSeleccionada.vueltoCUP > 0 && (
-                                            <div className="flex justify-between text-base md:text-lg"><span className="font-semibold text-gray-800 dark:text-gray-200">💵 Vuelto:</span><span className="font-bold text-blue-700 dark:text-blue-400">${ventaSeleccionada.vueltoCUP.toFixed(2)} CUP</span></div>
+                                            <div className="flex justify-between text-base md:text-lg">
+                                                <span className="font-semibold text-gray-200">💵 Vuelto:</span>
+                                                <span className="font-black text-blue-300">${ventaSeleccionada.vueltoCUP.toFixed(2)} CUP</span>
+                                            </div>
                                         )}
                                         {ventaSeleccionada.comisionVendedor && ventaSeleccionada.comisionVendedor > 0 && (
-                                            <div className="flex justify-between text-xs md:text-sm"><span className="text-gray-700 dark:text-gray-300">Comisión:</span><span className="font-semibold text-purple-700 dark:text-purple-400">${ventaSeleccionada.comisionVendedor.toFixed(2)}</span></div>
+                                            <div className="flex justify-between text-xs md:text-sm">
+                                                <span className="text-gray-400">Comisión:</span>
+                                                <span className="font-semibold text-violet-300">${ventaSeleccionada.comisionVendedor.toFixed(2)}</span>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
 
                                 {ventaSeleccionada.notas && (
-                                    <div className="bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                                        <h3 className="font-semibold text-yellow-800 dark:text-yellow-400 mb-1 text-sm">📝 Notas:</h3>
-                                        <p className="text-xs md:text-sm text-gray-700 dark:text-gray-300">{ventaSeleccionada.notas}</p>
+                                    <div className="rounded-xl border border-amber-400/25 bg-amber-500/10 p-3">
+                                        <h3 className="mb-1 text-sm font-bold text-amber-300">📝 Notas</h3>
+                                        <p className="text-xs text-gray-300 md:text-sm">{ventaSeleccionada.notas}</p>
                                     </div>
                                 )}
                                 {ventaSeleccionada.notaCancelacion && (
-                                    <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg border border-red-200 dark:border-red-800">
-                                        <h3 className="font-semibold text-red-800 dark:text-red-400 mb-1 text-sm">⚠️ Motivo Error:</h3>
-                                        <p className="text-xs md:text-sm text-gray-700 dark:text-gray-300">{ventaSeleccionada.notaCancelacion}</p>
+                                    <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 p-3">
+                                        <h3 className="mb-1 text-sm font-bold text-rose-300">⚠️ Motivo Error</h3>
+                                        <p className="text-xs text-gray-300 md:text-sm">{ventaSeleccionada.notaCancelacion}</p>
                                     </div>
                                 )}
                             </div>

@@ -1,7 +1,12 @@
+// ============ src/Clientes.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Cliente, Usuario } from './db';
-
+import {
+    STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
+    btnPrimary, input, label,
+    modalOverlay, modalPanel, modalHeader, modalTitle, modalClose, EmptyState,
+} from './theme';
 
 interface ClientesProps { usuarioActual: Usuario; }
 
@@ -24,90 +29,124 @@ export default function Clientes({ usuarioActual: _ }: ClientesProps) {
 
     const guardar = async () => {
         if (!nombre.trim()) { alert('Ingresa nombre'); return; }
-        const datos = { nombre: nombre.trim(), telefono: telefono.trim() || undefined, direccion: direccion.trim() || undefined, notas: notas.trim() || undefined, saldoPendiente: editando ? editando.saldoPendiente : 0, creadoEn: editando ? editando.creadoEn : new Date() };
-        if (editando) { await db.clientes.update(editando.id!, datos); }
-        else { await db.clientes.add(datos); }
+        const datos = {
+            nombre: nombre.trim(),
+            telefono: telefono.trim() || undefined,
+            direccion: direccion.trim() || undefined,
+            notas: notas.trim() || undefined,
+            saldoPendiente: editando ? editando.saldoPendiente : 0,
+            creadoEn: editando ? editando.creadoEn : new Date(),
+        };
+        if (editando) await db.clientes.update(editando.id!, datos);
+        else await db.clientes.add(datos);
         limpiar(); cargarClientes();
     };
 
-    const editar = (c: Cliente) => { setEditando(c); setNombre(c.nombre); setTelefono(c.telefono || ''); setDireccion(c.direccion || ''); setNotas(c.notas || ''); setModalAbierto(true); };
+    const editar = (c: Cliente) => {
+        setEditando(c); setNombre(c.nombre); setTelefono(c.telefono || '');
+        setDireccion(c.direccion || ''); setNotas(c.notas || ''); setModalAbierto(true);
+    };
 
-    const eliminar = async (id: number) => { if (confirm('¿Eliminar?')) { await db.clientes.delete(id); cargarClientes(); } };
+    const eliminar = async (id: number) => {
+        if (confirm('¿Eliminar?')) { await db.clientes.delete(id); cargarClientes(); }
+    };
 
-    const limpiar = () => { setNombre(''); setTelefono(''); setDireccion(''); setNotas(''); setEditando(null); setModalAbierto(false); };
+    const limpiar = () => {
+        setNombre(''); setTelefono(''); setDireccion(''); setNotas('');
+        setEditando(null); setModalAbierto(false);
+    };
 
-    const filtrados = clientes.filter(c => c.nombre.toLowerCase().includes(busqueda.toLowerCase()) || (c.telefono && c.telefono.includes(busqueda)));
+    const filtrados = clientes.filter(c =>
+        c.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+        (c.telefono && c.telefono.includes(busqueda))
+    );
     const totalFiado = clientes.reduce((s, c) => s + c.saldoPendiente, 0);
 
     return (
-        <div className="p-3 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-            <div className="max-w-4xl mx-auto">
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6 mb-4 md:mb-6">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h1 className="text-xl md:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-1">👥 Clientes</h1>
-                            <p className="text-xs md:text-base text-gray-600 dark:text-gray-400">{clientes.length} clientes | Fiado: <strong className="text-red-600 dark:text-red-400">${totalFiado.toFixed(2)}</strong></p>
+        <div className={pageWrap}>
+            <style>{STYLES}</style>
+            <BackgroundBlobs />
+
+            <div className="relative mx-auto max-w-4xl">
+                <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">👥</div>
+                            <div className="min-w-0">
+                                <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Clientes</h1>
+                                <p className="truncate text-xs text-gray-400 md:text-sm">
+                                    {clientes.length} clientes · Fiado:{' '}
+                                    <strong className="text-rose-300">${totalFiado.toFixed(2)}</strong>
+                                </p>
+                            </div>
                         </div>
-                        <button onClick={() => setModalAbierto(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-semibold text-sm md:text-base shadow-md">+ Nuevo</button>
+                        <button onClick={() => setModalAbierto(true)} className={btnPrimary}>+ Nuevo</button>
                     </div>
                 </div>
 
                 <div className="mb-4">
-                    <input type="text" placeholder="🔍 Buscar cliente..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                        className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-xl px-4 py-3 text-base" />
+                    <input type="text" placeholder="🔍 Buscar cliente..." value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)} className={input} />
                 </div>
 
-                <div className="space-y-2 md:space-y-3">
-                    {filtrados.map(c => (
-                        <div key={c.id} className="bg-white dark:bg-gray-800 p-3 md:p-4 rounded-xl md:rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
-                            <div className="flex justify-between items-start">
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm md:text-lg truncate">{c.nombre}</h3>
-                                    {c.telefono && <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">📱 {c.telefono}</p>}
-                                    {c.direccion && <p className="text-xs text-gray-500 dark:text-gray-400 truncate">📍 {c.direccion}</p>}
+                {filtrados.length === 0 ? (
+                    <div className={`${card} p-6`}><EmptyState icon="🔍" texto={busqueda ? 'Sin resultados' : 'Sin clientes aún'} /></div>
+                ) : (
+                    <div className="space-y-2 md:space-y-3">
+                        {filtrados.map(c => {
+                            const debe = c.saldoPendiente > 0;
+                            return (
+                                <div key={c.id} className={`${card} cc-fade-up p-3 md:p-4`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="truncate text-sm font-bold text-gray-100 md:text-lg">{c.nombre}</h3>
+                                            {c.telefono && <p className="text-xs text-gray-400 md:text-sm">📱 {c.telefono}</p>}
+                                            {c.direccion && <p className="truncate text-xs text-gray-500">📍 {c.direccion}</p>}
+                                        </div>
+                                        <div className="shrink-0 text-right">
+                                            <p className={`text-lg font-black md:text-2xl ${debe ? 'text-rose-300' : 'text-emerald-300'}`}>
+                                                ${c.saldoPendiente.toFixed(2)}
+                                            </p>
+                                            <p className="text-[10px] text-gray-500 md:text-xs">{debe ? 'Debe' : 'Al día'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 flex gap-2">
+                                        <button onClick={() => editar(c)} className="flex-1 rounded-lg border border-blue-400/20 bg-blue-500/10 py-2 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/20 md:text-sm">✏️ Editar</button>
+                                        <button onClick={() => eliminar(c.id!)} className="rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-300 transition-colors hover:bg-rose-500/20 md:text-sm">🗑️</button>
+                                    </div>
                                 </div>
-                                <div className="text-right ml-2 flex-shrink-0">
-                                    <p className={`text-lg md:text-2xl font-bold ${c.saldoPendiente > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-                                        ${c.saldoPendiente.toFixed(2)}
-                                    </p>
-                                    <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400">{c.saldoPendiente > 0 ? 'Debe' : 'Al día'}</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2 mt-3">
-                                <button onClick={() => editar(c)} className="flex-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 py-2 rounded-lg font-semibold text-xs md:text-sm">✏️ Editar</button>
-                                <button onClick={() => eliminar(c.id!)} className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-3 py-2 rounded-lg text-xs md:text-sm">🗑️</button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {modalAbierto && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center p-0 md:p-4 z-50">
-                        <div className="bg-white dark:bg-gray-800 rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-md max-h-[90vh] overflow-y-auto">
-                            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 md:px-6 py-3 md:py-4 flex justify-between items-center sticky top-0 z-10">
-                                <h2 className="text-lg md:text-xl font-bold text-white">{editando ? 'Editar' : 'Nuevo'} Cliente</h2>
-                                <button onClick={limpiar} className="text-white text-2xl">&times;</button>
+                    <div className={modalOverlay}>
+                        <div className={modalPanel}>
+                            <div className={modalHeader}>
+                                <h2 className={modalTitle}>{editando ? 'Editar' : 'Nuevo'} Cliente</h2>
+                                <button onClick={limpiar} className={modalClose}>&times;</button>
                             </div>
-                            <div className="p-4 md:p-6 space-y-4">
+                            <div className="space-y-4 p-4 md:p-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre *</label>
-                                    <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3 text-base" />
+                                    <label className={label}>Nombre *</label>
+                                    <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className={input} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Teléfono</label>
-                                    <input type="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3 text-base" />
+                                    <label className={label}>Teléfono</label>
+                                    <input type="tel" value={telefono} onChange={(e) => setTelefono(e.target.value)} className={input} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Dirección</label>
-                                    <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3 text-base" />
+                                    <label className={label}>Dirección</label>
+                                    <input type="text" value={direccion} onChange={(e) => setDireccion(e.target.value)} className={input} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notas</label>
-                                    <textarea value={notas} onChange={(e) => setNotas(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3 text-base" rows={2} />
+                                    <label className={label}>Notas</label>
+                                    <textarea value={notas} onChange={(e) => setNotas(e.target.value)} className={input} rows={2} />
                                 </div>
                                 <div className="flex gap-3 pt-2">
-                                    <button onClick={limpiar} className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 rounded-lg font-semibold">Cancelar</button>
-                                    <button onClick={guardar} className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold">{editando ? 'Guardar' : 'Crear'}</button>
+                                    <button onClick={limpiar} className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">Cancelar</button>
+                                    <button onClick={guardar} className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-base font-bold text-white shadow-md shadow-blue-500/25 transition-transform hover:-translate-y-0.5">{editando ? 'Guardar' : 'Crear'}</button>
                                 </div>
                             </div>
                         </div>

@@ -1,10 +1,13 @@
+// ============ src/Categorias.tsx ============
 import { useState, useEffect, useRef } from 'react';
 import { db } from './db';
 import type { Categoria } from './db';
-
-
-
 import { comprimirImagen } from './utils/imageUtils';
+import {
+    STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
+    btnPrimary, input, label,
+    modalOverlay, modalPanel, modalHeader, modalTitle, modalClose, EmptyState,
+} from './theme';
 
 interface CategoriasProps {
     onSeleccionarCategoria: (categoriaId: number) => void;
@@ -21,17 +24,11 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
 
     useEffect(() => { cargarCategorias(); }, []);
 
-    const cargarCategorias = async () => {
-        const cats = await db.categorias.toArray();
-        setCategorias(cats);
-    };
+    const cargarCategorias = async () => { setCategorias(await db.categorias.toArray()); };
 
     const manejarArchivo = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            const comprimida = await comprimirImagen(file, 400);
-            setImagenBase64(comprimida);
-        }
+        if (file) setImagenBase64(await comprimirImagen(file, 400));
     };
 
     const guardarCategoria = async () => {
@@ -40,13 +37,10 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
             nombre: nombre.trim(),
             descripcion: descripcion.trim() || undefined,
             imagen: imagenBase64 || undefined,
-            creadoEn: categoriaEditando ? categoriaEditando.creadoEn : new Date()
+            creadoEn: categoriaEditando ? categoriaEditando.creadoEn : new Date(),
         };
-        if (categoriaEditando) {
-            await db.categorias.update(categoriaEditando.id!, datos);
-        } else {
-            await db.categorias.add(datos);
-        }
+        if (categoriaEditando) await db.categorias.update(categoriaEditando.id!, datos);
+        else await db.categorias.add(datos);
         limpiarFormulario();
         cargarCategorias();
     };
@@ -60,94 +54,95 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
     };
 
     const eliminarCategoria = async (id: number) => {
-        if (confirm('¿Eliminar esta categoría?')) {
-            await db.categorias.delete(id);
-            cargarCategorias();
-        }
+        if (confirm('¿Eliminar esta categoría?')) { await db.categorias.delete(id); cargarCategorias(); }
     };
 
     const limpiarFormulario = () => {
-        setNombre('');
-        setDescripcion('');
-        setImagenBase64('');
-        setCategoriaEditando(null);
-        setModalAbierto(false);
+        setNombre(''); setDescripcion(''); setImagenBase64('');
+        setCategoriaEditando(null); setModalAbierto(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     return (
-        <div className="p-3 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-            <div className="max-w-7xl mx-auto">
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6 mb-4 md:mb-6">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h1 className="text-xl md:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-1">📂 Categorías</h1>
-                            <p className="text-xs md:text-base text-gray-600 dark:text-gray-400">Organiza tus productos</p>
+        <div className={pageWrap}>
+            <style>{STYLES}</style>
+            <BackgroundBlobs />
+
+            <div className="relative mx-auto max-w-7xl">
+                <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">📂</div>
+                            <div className="min-w-0">
+                                <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Categorías</h1>
+                                <p className="truncate text-xs text-gray-400 md:text-sm">{categorias.length} categorías · Organiza tus productos</p>
+                            </div>
                         </div>
-                        <button onClick={() => setModalAbierto(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-semibold text-sm md:text-base shadow-md">
-                            + Nueva
-                        </button>
+                        <button onClick={() => setModalAbierto(true)} className={btnPrimary}>+ Nueva</button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-6">
-                    {categorias.map((cat) => (
-                        <div key={cat.id} className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md overflow-hidden hover:shadow-xl transition-shadow group border border-gray-100 dark:border-gray-700">
-                            <div className="h-32 md:h-48 bg-gradient-to-br from-blue-500 to-blue-600 relative overflow-hidden flex items-center justify-center">
-                                {cat.imagen ? <img src={cat.imagen} alt={cat.nombre} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" /> : <span className="text-5xl md:text-6xl text-white opacity-50">📦</span>}
-                                <div className="absolute top-2 right-2 flex gap-1 md:gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => editarCategoria(cat)} className="bg-white bg-opacity-90 p-1.5 md:p-2 rounded-lg shadow-md hover:bg-blue-50 text-blue-600 text-sm md:text-base">✏️</button>
-                                    <button onClick={() => eliminarCategoria(cat.id!)} className="bg-white bg-opacity-90 p-1.5 md:p-2 rounded-lg shadow-md hover:bg-red-50 text-red-600 text-sm md:text-base">🗑️</button>
+                {categorias.length === 0 ? (
+                    <div className={`${card} p-6`}><EmptyState icon="📂" texto="Aún no hay categorías. Crea la primera." /></div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
+                        {categorias.map((cat) => (
+                            <div key={cat.id} className={`${card} cc-fade-up group overflow-hidden transition-transform duration-200 hover:-translate-y-0.5`}>
+                                <div className="relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 md:h-40">
+                                    {cat.imagen
+                                        ? <img src={cat.imagen} alt={cat.nombre} className="h-full w-full object-cover" />
+                                        : <span className="text-5xl opacity-30">📦</span>}
+                                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                                        <button onClick={() => editarCategoria(cat)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-sm text-blue-300 backdrop-blur-sm hover:border-blue-400/60 hover:bg-blue-500/20">✏️</button>
+                                        <button onClick={() => eliminarCategoria(cat.id!)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-sm text-rose-300 backdrop-blur-sm hover:border-rose-400/60 hover:bg-rose-500/20">🗑️</button>
+                                    </div>
+                                </div>
+                                <div className="p-3 md:p-4">
+                                    <h3 className="mb-1 truncate text-sm font-bold text-gray-100 md:text-base">{cat.nombre}</h3>
+                                    {cat.descripcion && <p className="mb-2 line-clamp-2 text-xs text-gray-400">{cat.descripcion}</p>}
+                                    <button onClick={() => onSeleccionarCategoria(cat.id!)} className="w-full rounded-lg border border-blue-400/20 bg-blue-500/10 py-2 text-xs font-bold text-blue-300 transition-colors duration-150 hover:bg-blue-500/20 md:text-sm">
+                                        Ver productos →
+                                    </button>
                                 </div>
                             </div>
-                            <div className="p-3 md:p-4">
-                                <h3 className="font-bold text-gray-800 dark:text-gray-200 text-sm md:text-lg mb-1 truncate">{cat.nombre}</h3>
-                                {cat.descripcion && <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400 line-clamp-2">{cat.descripcion}</p>}
-                                <button onClick={() => onSeleccionarCategoria(cat.id!)} className="w-full mt-2 md:mt-3 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 py-2 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 font-semibold text-xs md:text-sm transition-colors">
-                                    Ver productos →
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )}
 
                 {modalAbierto && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center p-0 md:p-4 z-50">
-                        <div className="bg-white dark:bg-gray-800 rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-md max-h-[90vh] overflow-y-auto">
-                            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 md:px-6 py-3 md:py-4 flex justify-between items-center sticky top-0 z-10">
-                                <h2 className="text-lg md:text-xl font-bold text-white">{categoriaEditando ? 'Editar' : 'Nueva'} Categoría</h2>
-                                <button onClick={limpiarFormulario} className="text-white hover:text-gray-200 text-2xl">&times;</button>
+                    <div className={modalOverlay}>
+                        <div className={modalPanel}>
+                            <div className={modalHeader}>
+                                <h2 className={modalTitle}>{categoriaEditando ? 'Editar' : 'Nueva'} Categoría</h2>
+                                <button onClick={limpiarFormulario} className={modalClose}>&times;</button>
                             </div>
-                            <div className="p-4 md:p-6 space-y-4">
+                            <div className="space-y-4 p-4 md:p-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Imagen</label>
-                                    <div className="flex flex-col md:flex-row items-start gap-4">
-                                        <div className="w-full md:w-32 h-32 bg-gray-100 dark:bg-gray-700 rounded-xl flex items-center justify-center overflow-hidden border-2 border-gray-200 dark:border-gray-600">
-                                            {imagenBase64 ? <img src={imagenBase64} alt="Preview" className="w-full h-full object-cover" /> : <span className="text-4xl text-gray-400">📷</span>}
+                                    <label className={label}>Imagen</label>
+                                    <div className="flex flex-col items-start gap-4 md:flex-row">
+                                        <div className="flex h-32 w-full items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-slate-800/60 md:w-32">
+                                            {imagenBase64 ? <img src={imagenBase64} alt="Preview" className="h-full w-full object-cover" /> : <span className="text-4xl text-gray-600">📷</span>}
                                         </div>
-                                        <div className="flex-1 w-full">
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                ref={fileInputRef}
-                                                onChange={manejarArchivo}
-                                                className="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-3 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 dark:file:bg-blue-900/30 file:text-blue-700 dark:file:text-blue-400 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
-                                            />
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Toca para seleccionar imagen</p>
+                                        <div className="w-full flex-1">
+                                            <input type="file" accept="image/*" ref={fileInputRef} onChange={manejarArchivo}
+                                                className="w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-blue-500/15 file:px-4 file:py-2.5 file:text-sm file:font-bold file:text-blue-300 hover:file:bg-blue-500/25" />
+                                            <p className="mt-2 text-xs text-gray-500">Toca para seleccionar imagen</p>
                                         </div>
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nombre *</label>
-                                    <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3 text-base" />
+                                    <label className={label}>Nombre *</label>
+                                    <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className={input} />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Descripción</label>
-                                    <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3 text-base" rows={2} />
+                                    <label className={label}>Descripción</label>
+                                    <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className={input} rows={2} />
                                 </div>
-                                <div className="flex gap-3 pt-4 border-t border-gray-100 dark:border-gray-700">
-                                    <button onClick={limpiarFormulario} className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 rounded-lg font-semibold text-base">Cancelar</button>
-                                    <button onClick={guardarCategoria} className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold text-base">{categoriaEditando ? 'Guardar' : 'Crear'}</button>
+                                <div className="flex gap-3 border-t border-white/10 pt-4">
+                                    <button onClick={limpiarFormulario} className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">Cancelar</button>
+                                    <button onClick={guardarCategoria} className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-base font-bold text-white shadow-md shadow-blue-500/25 transition-transform hover:-translate-y-0.5">
+                                        {categoriaEditando ? 'Guardar' : 'Crear'}
+                                    </button>
                                 </div>
                             </div>
                         </div>

@@ -1,7 +1,12 @@
+// ============ src/NuevaVenta.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
-
 import type { Producto, Venta, Usuario, Cliente, TasaCambio, MetodoPago, ItemCarrito } from './db';
+import {
+    STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
+    input, label, sectionTitle, btnSecondary,
+    modalOverlay, modalPanel, modalTitle, modalClose, EmptyState,
+} from './theme';
 
 interface Props { onVolver: () => void; usuarioActual: Usuario; onCerrarSesion: () => void; }
 
@@ -27,7 +32,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
 
     const cargarTodo = async () => {
         const [prods, cats, clis, tasasData] = await Promise.all([
-            db.productos.toArray(), db.categorias.toArray(), db.clientes.toArray(), db.tasasCambio.toArray()
+            db.productos.toArray(), db.categorias.toArray(), db.clientes.toArray(), db.tasasCambio.toArray(),
         ]);
         setProductos(prods.filter(p => p.stockActual > 0));
         setCategorias(cats); setClientes(clis); setTasas(tasasData); cargarVentasHoy();
@@ -86,7 +91,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
             vendedorId: usuarioActual.id!, vendedorNombre: usuarioActual.nombre, estado: 'completada',
             metodosPago: esFiado ? [{ tipo: 'fiado', monto: totalCarrito, moneda: 'CUP', montoEnCUP: totalCarrito }] : metodosPago,
             notas: notasVenta || undefined, comisionVendedor: comision, esFiado,
-            clienteId: clienteSeleccionado?.id, clienteNombre: clienteSeleccionado?.nombre, vueltoCUP: vuelto > 0 ? vuelto : 0
+            clienteId: clienteSeleccionado?.id, clienteNombre: clienteSeleccionado?.nombre, vueltoCUP: vuelto > 0 ? vuelto : 0,
         });
         for (const item of carrito) {
             const prod = await db.productos.get(item.productoId);
@@ -128,64 +133,76 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     });
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-3 md:p-6">
-            <div className="max-w-7xl mx-auto">
+        <div className={pageWrap}>
+            <style>{STYLES}</style>
+            <BackgroundBlobs />
+
+            <div className="relative mx-auto max-w-7xl">
                 {/* Header */}
-                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6 mb-4 md:mb-6">
-                    <div className="flex justify-between items-center">
-                        <div className="flex-1 min-w-0">
-                            <h1 className="text-xl md:text-3xl font-bold text-gray-800 dark:text-gray-200">🛒 Nueva Venta</h1>
-                            <p className="text-sm text-gray-600 dark:text-gray-400 truncate">Vendedor: <strong className="text-blue-600 dark:text-blue-400">{usuarioActual.nombre}</strong></p>
+                <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">🛒</div>
+                            <div className="min-w-0">
+                                <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Nueva Venta</h1>
+                                <p className="truncate text-xs text-gray-400 md:text-sm">Vendedor: <strong className="text-blue-300">{usuarioActual.nombre}</strong></p>
+                            </div>
                         </div>
-                        <div className="flex gap-1 md:gap-2 ml-2">
-                            <button onClick={onVolver} className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 md:px-4 py-2 rounded-lg font-semibold text-sm md:text-base">←</button>
-                            <button onClick={onCerrarSesion} className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 md:px-4 py-2 rounded-lg font-semibold text-sm md:text-base">Salir</button>
+                        <div className="flex shrink-0 gap-1.5 md:gap-2">
+                            <button onClick={onVolver} className={btnSecondary}>←</button>
+                            <button onClick={onCerrarSesion}
+                                className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2.5 text-sm font-bold text-rose-300 transition-colors hover:bg-rose-500/20 md:px-4 md:text-base">
+                                Salir
+                            </button>
                         </div>
                     </div>
                 </div>
 
-                {/* Barra flotante móvil */}
+                {/* Barra flotante móvil (carrito) */}
                 {carrito.length > 0 && !mostrarPagoMovil && (
-                    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-blue-600 text-white p-3 flex justify-between items-center shadow-lg">
+                    <div className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between border-t border-white/10 bg-gradient-to-r from-blue-600 to-indigo-600 p-3 text-white shadow-2xl lg:hidden">
                         <div>
                             <p className="text-xs opacity-80">{carrito.length} producto(s)</p>
-                            <p className="text-xl font-bold">${totalCarrito.toFixed(2)}</p>
+                            <p className="text-xl font-black">${totalCarrito.toFixed(2)}</p>
                         </div>
-                        <button onClick={() => setMostrarPagoMovil(true)} className="bg-white text-blue-600 px-5 py-2 rounded-lg font-bold text-sm">Cobrar →</button>
+                        <button onClick={() => setMostrarPagoMovil(true)}
+                            className="rounded-xl bg-white px-5 py-2 text-sm font-black text-blue-700 transition-transform hover:-translate-y-0.5">
+                            Cobrar →
+                        </button>
                     </div>
                 )}
 
-                {/* Layout principal */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 pb-20 lg:pb-0">
-                    {/* Productos (2 cols en desktop) */}
-                    <div className="lg:col-span-2 space-y-4 md:space-y-6">
-                        <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-3 md:p-4">
-                            <div className="flex flex-col gap-2">
-                                <input type="text" placeholder="🔍 Buscar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
-                                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3" />
+                <div className="grid grid-cols-1 gap-4 pb-20 lg:grid-cols-3 lg:gap-6 lg:pb-0">
+                    {/* Productos */}
+                    <div className="space-y-4 lg:col-span-2 lg:space-y-6">
+                        <div className={`${card} cc-fade-up p-3 md:p-4`}>
+                            <div className="flex flex-col gap-2 md:flex-row">
+                                <input type="text" placeholder="🔍 Buscar producto o código..."
+                                    value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                                    className={`${input} md:flex-1`} />
                                 <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value === 'todas' ? 'todas' : parseInt(e.target.value))}
-                                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3">
-                                    <option value="todas">Todas</option>
+                                    className={`${input} md:w-56`}>
+                                    <option value="todas">Todas las categorías</option>
                                     {categorias.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
                                 </select>
                             </div>
                         </div>
 
-                        <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-3 md:p-6">
-                            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 text-gray-800 dark:text-gray-200">Productos</h2>
+                        <div className={`${card} cc-fade-up p-3 md:p-5`}>
+                            <h2 className={`${sectionTitle} mb-3 md:mb-4`}>Productos ({productosFiltrados.length})</h2>
                             {productosFiltrados.length === 0 ? (
-                                <p className="text-gray-500 dark:text-gray-400 text-center py-8">No hay productos</p>
+                                <EmptyState icon="📦" texto="No hay productos que coincidan" />
                             ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
+                                <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
                                     {productosFiltrados.map((p) => (
                                         <button key={p.id} onClick={() => agregarAlCarrito(p)}
-                                            className="p-2 md:p-3 rounded-lg md:rounded-xl border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 hover:border-blue-400 transition-all text-left">
-                                            <div className="h-16 md:h-20 bg-gray-100 dark:bg-gray-600 rounded-lg mb-1 md:mb-2 overflow-hidden flex items-center justify-center">
-                                                {p.imagen ? <img src={p.imagen} alt="" className="w-full h-full object-cover" /> : <span className="text-xl md:text-2xl text-gray-300">📦</span>}
+                                            className="group rounded-xl border border-white/10 bg-slate-800/40 p-2 text-left transition-all duration-150 hover:-translate-y-0.5 hover:border-blue-400/50 hover:bg-slate-800/70 md:p-3">
+                                            <div className="mb-1 flex h-16 items-center justify-center overflow-hidden rounded-lg bg-slate-900/60 md:mb-2 md:h-20">
+                                                {p.imagen ? <img src={p.imagen} alt="" className="h-full w-full object-cover" /> : <span className="text-xl opacity-40 md:text-2xl">📦</span>}
                                             </div>
-                                            <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-xs md:text-sm truncate">{p.nombre}</h3>
-                                            <p className="text-sm md:text-base font-bold text-blue-600 dark:text-blue-400">${(p.precioVenta || 0).toFixed(2)}</p>
-                                            <p className="text-[10px] md:text-xs text-gray-500 dark:text-gray-400">Stock: {p.stockActual}</p>
+                                            <h3 className="truncate text-xs font-bold text-gray-100 md:text-sm">{p.nombre}</h3>
+                                            <p className="text-sm font-black text-blue-300 md:text-base">${(p.precioVenta || 0).toFixed(2)}</p>
+                                            <p className="text-[10px] text-gray-500 md:text-xs">Stock: {p.stockActual}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -193,94 +210,125 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                         </div>
                     </div>
 
-                    {/* Panel Derecho: Carrito + Pago (1 col en desktop) */}
-                    <div className={`${mostrarPagoMovil ? 'block' : 'hidden lg:block'} space-y-4 md:space-y-6`}>
-                        {/* Carrito */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6">
-                            <div className="flex justify-between items-center mb-3 md:mb-4">
-                                <h2 className="text-lg md:text-xl font-semibold text-gray-800 dark:text-gray-200">🛒 Carrito ({carrito.length})</h2>
-                                <button onClick={() => setMostrarPagoMovil(false)} className="lg:hidden text-gray-500 text-2xl">✕</button>
+                    {/* Carrito + Pago */}
+                    <div className={`${mostrarPagoMovil ? 'block' : 'hidden lg:block'} space-y-4 lg:space-y-6`}>
+                        <div className={`${card} p-4 md:p-5`}>
+                            <div className="mb-3 flex items-center justify-between md:mb-4">
+                                <h2 className={sectionTitle}>🛒 Carrito ({carrito.length})</h2>
+                                <button onClick={() => setMostrarPagoMovil(false)} className="text-2xl text-gray-400 hover:text-white lg:hidden">✕</button>
                             </div>
-                            {carrito.length === 0 ? <p className="text-gray-500 dark:text-gray-400 text-center py-8">Vacío</p> : (
-                                <div className="space-y-2 md:space-y-3 mb-4">
+                            {carrito.length === 0 ? (
+                                <p className="py-8 text-center text-sm text-gray-500">Vacío · Toca un producto para agregar</p>
+                            ) : (
+                                <div className="mb-4 space-y-2">
                                     {carrito.map((item) => (
-                                        <div key={item.productoId} className="bg-gray-50 dark:bg-gray-700 p-2 md:p-3 rounded-lg md:rounded-xl">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <p className="font-semibold text-gray-800 dark:text-gray-200 text-sm flex-1">{item.productoNombre}</p>
-                                                <button onClick={() => eliminarDelCarrito(item.productoId)} className="text-red-500 ml-2">✕</button>
+                                        <div key={item.productoId} className="rounded-xl border border-white/10 bg-slate-800/50 p-2 md:p-3">
+                                            <div className="mb-2 flex items-start justify-between gap-2">
+                                                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-100">{item.productoNombre}</p>
+                                                <button onClick={() => eliminarDelCarrito(item.productoId)} className="text-rose-400 hover:text-rose-300">✕</button>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <button onClick={() => cambiarCantidad(item.productoId, item.cantidad - 1)} className="bg-gray-200 dark:bg-gray-600 w-7 h-7 md:w-8 md:h-8 rounded-lg font-bold text-gray-800 dark:text-gray-200 text-sm">-</button>
-                                                <span className="flex-1 text-center font-semibold text-gray-800 dark:text-gray-200">{item.cantidad}</span>
-                                                <button onClick={() => cambiarCantidad(item.productoId, item.cantidad + 1)} className="bg-gray-200 dark:bg-gray-600 w-7 h-7 md:w-8 md:h-8 rounded-lg font-bold text-gray-800 dark:text-gray-200 text-sm">+</button>
-                                                <span className="text-base md:text-lg font-bold text-blue-600 dark:text-blue-400 ml-2">${item.subtotal.toFixed(2)}</span>
+                                                <button onClick={() => cambiarCantidad(item.productoId, item.cantidad - 1)}
+                                                    className="h-7 w-7 rounded-lg border border-white/10 bg-slate-700 font-bold text-gray-100 transition-colors hover:bg-slate-600 md:h-8 md:w-8">−</button>
+                                                <span className="flex-1 text-center text-sm font-black text-gray-100">{item.cantidad}</span>
+                                                <button onClick={() => cambiarCantidad(item.productoId, item.cantidad + 1)}
+                                                    className="h-7 w-7 rounded-lg border border-white/10 bg-slate-700 font-bold text-gray-100 transition-colors hover:bg-slate-600 md:h-8 md:w-8">+</button>
+                                                <span className="ml-2 text-base font-black text-blue-300 md:text-lg">${item.subtotal.toFixed(2)}</span>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             )}
-                            <div className="border-t border-gray-200 dark:border-gray-700 pt-3 md:pt-4">
-                                <div className="flex justify-between"><span className="text-base md:text-lg font-semibold text-gray-800 dark:text-gray-200">TOTAL:</span><span className="text-2xl md:text-3xl font-bold text-green-600 dark:text-green-400">${totalCarrito.toFixed(2)}</span></div>
+                            <div className="border-t border-white/10 pt-3 md:pt-4">
+                                <div className="flex justify-between">
+                                    <span className="text-base font-bold text-gray-200 md:text-lg">TOTAL:</span>
+                                    <span className="text-2xl font-black text-emerald-300 md:text-3xl">${totalCarrito.toFixed(2)}</span>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Pago */}
-                        <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6">
-                            <h2 className="text-lg md:text-xl font-semibold mb-3 md:mb-4 text-gray-800 dark:text-gray-200">💰 Pago</h2>
+                        <div className={`${card} p-4 md:p-5`}>
+                            <h2 className={`${sectionTitle} mb-3 md:mb-4`}>💰 Pago</h2>
 
                             <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">👤 Cliente</label>
-                                <select value={clienteSeleccionado?.id || ''} onChange={(e) => setClienteSeleccionado(clientes.find(c => c.id === parseInt(e.target.value)) || null)}
-                                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2.5 text-sm md:text-base">
-                                    <option value="">Venta rápida</option>
+                                <label className={label}>👤 Cliente</label>
+                                <select value={clienteSeleccionado?.id || ''} onChange={(e) => setClienteSeleccionado(clientes.find(c => c.id === parseInt(e.target.value)) || null)} className={input}>
+                                    <option value="">Venta rápida (sin cliente)</option>
                                     {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} {c.saldoPendiente > 0 ? `(Debe $${c.saldoPendiente.toFixed(0)})` : ''}</option>)}
                                 </select>
                             </div>
 
-                            <div className="flex items-center gap-3 bg-yellow-50 dark:bg-yellow-900/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800 mb-4">
-                                <input type="checkbox" id="fiado" checked={esFiado} onChange={(e) => setEsFiado(e.target.checked)} className="w-5 h-5" disabled={!clienteSeleccionado} />
-                                <label htmlFor="fiado" className="font-semibold text-yellow-800 dark:text-yellow-400 text-sm">💳 Fiado</label>
+                            <div className={`mb-4 flex items-center gap-3 rounded-xl border p-3 ${clienteSeleccionado ? 'border-amber-400/25 bg-amber-500/10' : 'border-white/10 bg-slate-800/40 opacity-60'}`}>
+                                <input type="checkbox" id="fiado" checked={esFiado}
+                                    onChange={(e) => setEsFiado(e.target.checked)}
+                                    disabled={!clienteSeleccionado}
+                                    className="h-5 w-5 accent-amber-500" />
+                                <label htmlFor="fiado" className="text-sm font-bold text-amber-200">💳 Marcar como Fiado</label>
                             </div>
 
                             {!esFiado && (
                                 <div className="mb-4">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Métodos</span>
-                                        <button onClick={agregarMetodoPago} className="text-blue-600 dark:text-blue-400 text-sm font-semibold">+ Método</button>
+                                    <div className="mb-2 flex items-center justify-between">
+                                        <span className="text-sm font-semibold text-gray-300">Métodos de pago</span>
+                                        <button onClick={agregarMetodoPago} className="text-sm font-bold text-blue-300 hover:text-blue-200">+ Método</button>
                                     </div>
                                     <div className="space-y-2">
                                         {metodosPago.map((mp, i) => (
-                                            <div key={i} className="bg-gray-50 dark:bg-gray-700 p-2 md:p-3 rounded-lg">
-                                                <div className="flex gap-2 mb-1">
+                                            <div key={i} className="rounded-xl border border-white/10 bg-slate-800/50 p-2 md:p-3">
+                                                <div className="flex gap-2">
                                                     <select value={mp.tipo} onChange={(e) => actualizarMetodoPago(i, 'tipo', e.target.value)}
-                                                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg px-2 py-2 text-sm">
-                                                        <option value="efectivo">💵</option><option value="transferencia">📱</option><option value="tarjeta">💳</option>
+                                                        className="rounded-lg border border-white/10 bg-slate-800 px-2 py-2 text-sm text-gray-100 outline-none">
+                                                        <option value="efectivo">💵</option>
+                                                        <option value="transferencia">📱</option>
+                                                        <option value="tarjeta">💳</option>
                                                     </select>
-                                                    <input type="number" step="0.01" placeholder="Monto" value={mp.monto || ''} onChange={(e) => actualizarMetodoPago(i, 'monto', parseFloat(e.target.value) || 0)}
-                                                        className="flex-1 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm" />
+                                                    <input type="number" step="0.01" placeholder="Monto" value={mp.monto || ''}
+                                                        onChange={(e) => actualizarMetodoPago(i, 'monto', parseFloat(e.target.value) || 0)}
+                                                        className="flex-1 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-gray-100 outline-none focus:border-blue-400/60" />
                                                     <select value={mp.moneda} onChange={(e) => actualizarMetodoPago(i, 'moneda', e.target.value)}
-                                                        className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg px-2 py-2 text-sm">
-                                                        <option value="CUP">CUP</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="MLC">MLC</option>
+                                                        className="rounded-lg border border-white/10 bg-slate-800 px-2 py-2 text-sm text-gray-100 outline-none">
+                                                        <option value="CUP">CUP</option>
+                                                        <option value="USD">USD</option>
+                                                        <option value="EUR">EUR</option>
+                                                        <option value="MLC">MLC</option>
                                                     </select>
-                                                    {metodosPago.length > 1 && <button onClick={() => eliminarMetodoPago(i)} className="text-red-500">✕</button>}
+                                                    {metodosPago.length > 1 && (
+                                                        <button onClick={() => eliminarMetodoPago(i)} className="text-rose-400">✕</button>
+                                                    )}
                                                 </div>
-                                                {mp.moneda !== 'CUP' && mp.monto > 0 && <p className="text-xs text-gray-500 dark:text-gray-400">= ${mp.montoEnCUP.toFixed(2)} CUP</p>}
+                                                {mp.moneda !== 'CUP' && mp.monto > 0 && (
+                                                    <p className="mt-1.5 text-xs text-gray-400">= ${mp.montoEnCUP.toFixed(2)} CUP</p>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
 
-                                    <div className={`mt-3 p-3 rounded-lg ${totalPagadoCUP >= totalCarrito ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
-                                        <div className="flex justify-between text-sm"><span className="text-gray-700 dark:text-gray-300">Pagado:</span><span className="font-semibold text-gray-800 dark:text-gray-200">${totalPagadoCUP.toFixed(2)}</span></div>
-                                        {vuelto > 0 && <div className="flex justify-between text-base md:text-lg font-bold mt-1"><span className="text-green-700 dark:text-green-400">VUELTO:</span><span className="text-green-700 dark:text-green-400">${vuelto.toFixed(2)} CUP</span></div>}
-                                        {totalPagadoCUP < totalCarrito && <p className="text-sm text-red-600 dark:text-red-400 mt-1">Faltan: ${(totalCarrito - totalPagadoCUP).toFixed(2)}</p>}
+                                    <div className={`mt-3 rounded-xl border p-3 ${totalPagadoCUP >= totalCarrito
+                                        ? 'border-emerald-400/25 bg-emerald-500/10'
+                                        : 'border-rose-400/25 bg-rose-500/10'
+                                        }`}>
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-gray-300">Pagado:</span>
+                                            <span className="font-semibold text-gray-100">${totalPagadoCUP.toFixed(2)}</span>
+                                        </div>
+                                        {vuelto > 0 && (
+                                            <div className="mt-1 flex justify-between text-base font-black md:text-lg">
+                                                <span className="text-emerald-300">VUELTO:</span>
+                                                <span className="text-emerald-300">${vuelto.toFixed(2)} CUP</span>
+                                            </div>
+                                        )}
+                                        {totalPagadoCUP < totalCarrito && (
+                                            <p className="mt-1 text-sm text-rose-300">Faltan: ${(totalCarrito - totalPagadoCUP).toFixed(2)}</p>
+                                        )}
                                     </div>
                                 </div>
                             )}
 
-                            <textarea value={notasVenta} onChange={(e) => setNotasVenta(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-3 py-2 text-sm mb-4" rows={2} placeholder="📝 Notas..." />
+                            <textarea value={notasVenta} onChange={(e) => setNotasVenta(e.target.value)}
+                                className={`${input} mb-4`} rows={2} placeholder="📝 Notas (opcional)" />
 
                             <button onClick={registrarVenta} disabled={carrito.length === 0}
-                                className="w-full bg-green-600 text-white px-6 py-3 md:py-4 rounded-xl hover:bg-green-700 font-semibold text-base md:text-lg shadow-lg disabled:opacity-50">
+                                className="w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3.5 text-base font-black text-white shadow-lg shadow-emerald-500/30 transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 md:py-4 md:text-lg">
                                 ✓ Registrar Venta
                             </button>
                         </div>
@@ -288,24 +336,33 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                 </div>
             </div>
 
-            {/* Modal Cancelación */}
             {modalCancelacion.abierto && modalCancelacion.venta && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center p-0 md:p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-md max-h-[80vh] overflow-y-auto">
-                        <div className={`px-6 py-4 ${usuarioActual.rol === 'admin' ? 'bg-red-600' : 'bg-yellow-500'} rounded-t-2xl`}>
-                            <h2 className="text-xl font-bold text-white">{usuarioActual.rol === 'admin' ? '🗑️ Eliminar' : '⚠️ Error'}</h2>
+                <div className={modalOverlay}>
+                    <div className={modalPanel}>
+                        <div className={`flex items-center justify-between px-4 py-3 md:px-6 md:py-4 ${usuarioActual.rol === 'admin' ? 'bg-gradient-to-r from-rose-500 to-red-600' : 'bg-gradient-to-r from-amber-500 to-orange-600'}`}>
+                            <h2 className={modalTitle}>{usuarioActual.rol === 'admin' ? '🗑️ Eliminar' : '⚠️ Error'}</h2>
+                            <button onClick={() => setModalCancelacion({ abierto: false, venta: null })} className={modalClose}>&times;</button>
                         </div>
-                        <div className="p-6 space-y-4">
-                            <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-xl">
-                                <p className="font-semibold text-gray-800 dark:text-gray-200">
-                                    {modalCancelacion.venta.items && modalCancelacion.venta.items.length > 0 ? modalCancelacion.venta.items.map(i => i.productoNombre).join(', ') : modalCancelacion.venta.productoNombre || 'Venta'}
+                        <div className="space-y-4 p-6">
+                            <div className="rounded-xl border border-white/10 bg-slate-800/50 p-4">
+                                <p className="font-semibold text-gray-100">
+                                    {modalCancelacion.venta.items && modalCancelacion.venta.items.length > 0
+                                        ? modalCancelacion.venta.items.map(i => i.productoNombre).join(', ')
+                                        : modalCancelacion.venta.productoNombre || 'Venta'}
                                 </p>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Total: ${modalCancelacion.venta.total.toFixed(2)}</p>
+                                <p className="text-sm text-gray-400">Total: ${modalCancelacion.venta.total.toFixed(2)}</p>
                             </div>
-                            <textarea value={razonCancelacion} onChange={(e) => setRazonCancelacion(e.target.value)} className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3" rows={3} placeholder="Motivo..." />
+                            <textarea value={razonCancelacion} onChange={(e) => setRazonCancelacion(e.target.value)}
+                                className={input} rows={3} placeholder="Motivo..." />
                             <div className="flex gap-3">
-                                <button onClick={() => setModalCancelacion({ abierto: false, venta: null })} className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 rounded-lg font-semibold">Cancelar</button>
-                                <button onClick={cancelarVenta} className={`flex-1 py-3 rounded-lg font-semibold text-white ${usuarioActual.rol === 'admin' ? 'bg-red-600' : 'bg-yellow-600'}`}>{usuarioActual.rol === 'admin' ? 'Eliminar' : 'Marcar'}</button>
+                                <button onClick={() => setModalCancelacion({ abierto: false, venta: null })}
+                                    className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">
+                                    Cancelar
+                                </button>
+                                <button onClick={cancelarVenta}
+                                    className={`flex-1 rounded-xl py-3 text-base font-bold text-white shadow-md transition-transform hover:-translate-y-0.5 ${usuarioActual.rol === 'admin' ? 'bg-gradient-to-r from-rose-500 to-red-600 shadow-rose-500/25' : 'bg-gradient-to-r from-amber-500 to-orange-600 shadow-amber-500/25'}`}>
+                                    {usuarioActual.rol === 'admin' ? 'Eliminar' : 'Marcar'}
+                                </button>
                             </div>
                         </div>
                     </div>
