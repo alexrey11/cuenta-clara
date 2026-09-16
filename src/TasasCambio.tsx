@@ -2,105 +2,104 @@ import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { TasaCambio, Usuario } from './db';
 
+interface TasasCambioProps {
+    usuarioActual: Usuario;
+}
 
-
-interface TasasCambioProps { usuarioActual: Usuario; }
-
-export default function TasasCambio({ usuarioActual }: TasasCambioProps) {
+export default function TasasCambio({ usuarioActual: _ }: TasasCambioProps) {
     const [tasas, setTasas] = useState<TasaCambio[]>([]);
-    const [editandoId, setEditandoId] = useState<number | null>(null);
+    const [editando, setEditando] = useState<TasaCambio | null>(null);
     const [nuevaTasa, setNuevaTasa] = useState('');
 
     useEffect(() => { cargarTasas(); }, []);
 
     const cargarTasas = async () => {
-        let todas = await db.tasasCambio.toArray();
-        if (todas.length === 0) {
-            await db.tasasCambio.bulkAdd([
-                { moneda: 'USD', tasa: 300, fechaActualizacion: new Date(), actualizadoPor: 'Sistema' },
-                { moneda: 'EUR', tasa: 330, fechaActualizacion: new Date(), actualizadoPor: 'Sistema' },
-                { moneda: 'MLC', tasa: 280, fechaActualizacion: new Date(), actualizadoPor: 'Sistema' }
-            ]);
-            todas = await db.tasasCambio.toArray();
+        const t = await db.tasasCambio.toArray();
+        setTasas(t);
+    };
+
+    const guardarTasa = async () => {
+        if (!editando || !nuevaTasa) return;
+        const valor = parseFloat(nuevaTasa);
+        if (valor <= 0) { alert('Tasa inválida'); return; }
+
+        if (editando.id) {
+            await db.tasasCambio.update(editando.id, {
+                tasa: valor,
+                fechaActualizacion: new Date(),
+                actualizadoPor: 'Admin'
+            });
         }
-        const map = new Map<string, TasaCambio>();
-        todas.forEach(t => { if (!map.has(t.moneda) || new Date(t.fechaActualizacion) > new Date(map.get(t.moneda)!.fechaActualizacion)) map.set(t.moneda, t); });
-        const idsMantener = Array.from(map.values()).map(t => t.id!);
-        const idsBorrar = todas.filter(t => !idsMantener.includes(t.id!)).map(t => t.id!);
-        if (idsBorrar.length > 0) await db.tasasCambio.bulkDelete(idsBorrar);
-        setTasas(Array.from(map.values()));
+        setEditando(null);
+        setNuevaTasa('');
+        cargarTasas();
     };
 
-    const guardar = async (id: number) => {
-        const v = parseFloat(nuevaTasa);
-        if (!v || v <= 0) { alert('Tasa inválida'); return; }
-        await db.tasasCambio.update(id, { tasa: v, fechaActualizacion: new Date(), actualizadoPor: usuarioActual.nombre });
-        setEditandoId(null); setNuevaTasa(''); cargarTasas();
+    const getMonedaIcon = (moneda: string) => {
+        switch (moneda) {
+            case 'USD': return '🇺🇸';
+            case 'EUR': return '🇪🇺';
+            case 'MLC': return '💳';
+            default: return '💰';
+        }
     };
-
-    const info: Record<string, { nombre: string; emoji: string }> = { USD: { nombre: 'Dólar', emoji: '🇺🇸' }, EUR: { nombre: 'Euro', emoji: '🇪🇺' }, MLC: { nombre: 'MLC', emoji: '🏦' } };
 
     return (
-        <div className="p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
-            <div className="max-w-4xl mx-auto">
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 mb-6">
-                    <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">💱 Tasas de Cambio</h1>
-                    <p className="text-gray-600 dark:text-gray-400">1 unidad = X CUP</p>
+        <div className="p-3 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
+            <div className="max-w-2xl mx-auto">
+                <div className="bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-md p-4 md:p-6 mb-4 md:mb-6">
+                    <h1 className="text-xl md:text-3xl font-bold text-gray-800 dark:text-gray-200 mb-1">💱 Tasas de Cambio</h1>
+                    <p className="text-xs md:text-base text-gray-600 dark:text-gray-400">Configura las tasas para conversión de monedas</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <div className="bg-gradient-to-br from-green-500 to-green-600 text-white p-6 rounded-2xl shadow-md">
-                        <div className="flex items-center gap-3 mb-4"><span className="text-3xl">🇨🇺</span><div><h3 className="font-bold text-lg">CUP</h3><p className="text-sm opacity-90">Peso Cubano</p></div></div>
-                        <p className="text-4xl font-bold">1.00</p>
-                        <p className="text-sm opacity-75">Moneda base</p>
-                    </div>
-
-                    {tasas.map((t) => {
-                        const i = info[t.moneda] || { nombre: t.moneda, emoji: '💰' };
-                        const edit = editandoId === t.id;
-                        return (
-                            <div key={t.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 border border-gray-100 dark:border-gray-700">
-                                <div className="flex items-center gap-3 mb-4"><span className="text-3xl">{i.emoji}</span><div><h3 className="font-bold text-lg text-gray-800 dark:text-gray-200">{t.moneda}</h3><p className="text-sm text-gray-500 dark:text-gray-400">{i.nombre}</p></div></div>
-                                {edit ? (
-                                    <div className="space-y-3">
-                                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
-                                            <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold mb-2">Nueva tasa:</p>
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">1 {t.moneda} =</span>
-                                                <input type="number" step="0.01" value={nuevaTasa} onChange={(e) => setNuevaTasa(e.target.value)} autoFocus
-                                                    className="flex-1 min-w-[80px] border border-blue-300 dark:border-blue-600 rounded-lg px-3 py-2 text-lg font-bold bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                                <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">CUP</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => guardar(t.id!)} className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-semibold text-sm">✓</button>
-                                            <button onClick={() => { setEditandoId(null); setNuevaTasa(''); }} className="flex-1 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 py-2 rounded-lg font-semibold text-sm">✕</button>
-                                        </div>
-                                    </div>
-                                ) : (
+                <div className="space-y-3 md:space-y-4">
+                    {tasas.map(t => (
+                        <div key={t.id} className="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl md:rounded-2xl shadow-md border border-gray-100 dark:border-gray-700">
+                            <div className="flex justify-between items-center mb-3">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-3xl md:text-4xl">{getMonedaIcon(t.moneda)}</span>
                                     <div>
-                                        <p className="text-4xl font-bold text-gray-800 dark:text-gray-200 mb-1">{t.tasa.toFixed(2)}</p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">1 {t.moneda} = {t.tasa.toFixed(2)} CUP</p>
-                                        <button onClick={() => { setEditandoId(t.id!); setNuevaTasa(t.tasa.toString()); }} className="w-full bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 py-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 font-semibold text-sm">✏️ Actualizar</button>
-                                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{new Date(t.fechaActualizacion).toLocaleDateString('es-ES')}</p>
+                                        <h3 className="font-bold text-gray-800 dark:text-gray-200 text-base md:text-lg">{t.moneda}</h3>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">1 {t.moneda} = X CUP</p>
                                     </div>
-                                )}
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-2xl md:text-3xl font-bold text-blue-600 dark:text-blue-400">${t.tasa.toFixed(2)}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">CUP</p>
+                                </div>
                             </div>
-                        );
-                    })}
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                                Actualizado: {new Date(t.fechaActualizacion).toLocaleDateString('es-ES')} por {t.actualizadoPor}
+                            </div>
+                            <button onClick={() => { setEditando(t); setNuevaTasa(t.tasa.toString()); }}
+                                className="w-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 py-2 rounded-lg font-semibold text-sm md:text-base">
+                                ✏️ Editar Tasa
+                            </button>
+                        </div>
+                    ))}
                 </div>
 
-                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200">📊 Ejemplo</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {tasas.map((t) => (
-                            <div key={t.id} className="bg-gray-50 dark:bg-gray-700 p-4 rounded-xl text-center">
-                                <p className="text-sm text-gray-500 dark:text-gray-400">10 {t.moneda} =</p>
-                                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{(10 * t.tasa).toFixed(2)} CUP</p>
+                {editando && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end md:items-center justify-center p-0 md:p-4 z-50">
+                        <div className="bg-white dark:bg-gray-800 rounded-t-2xl md:rounded-2xl shadow-2xl w-full md:max-w-md">
+                            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 md:px-6 py-3 md:py-4 flex justify-between items-center sticky top-0 z-10">
+                                <h2 className="text-lg md:text-xl font-bold text-white">Editar Tasa {editando.moneda}</h2>
+                                <button onClick={() => { setEditando(null); setNuevaTasa(''); }} className="text-white text-2xl">&times;</button>
                             </div>
-                        ))}
+                            <div className="p-4 md:p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nueva tasa (CUP):</label>
+                                    <input type="number" step="0.01" value={nuevaTasa} onChange={(e) => setNuevaTasa(e.target.value)}
+                                        className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg px-4 py-3 text-base md:text-lg" />
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => { setEditando(null); setNuevaTasa(''); }} className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 rounded-lg font-semibold">Cancelar</button>
+                                    <button onClick={guardarTasa} className="flex-1 bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold">Guardar</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
         </div>
     );
