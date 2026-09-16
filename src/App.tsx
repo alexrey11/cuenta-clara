@@ -28,8 +28,8 @@ function App() {
   const [primeraVez, setPrimeraVez] = useState<boolean | null>(null);
   const [licenciaActiva, setLicenciaActiva] = useState(true);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<number | null>(null);
+  const [sidebarAbierto, setSidebarAbierto] = useState(false);
 
-  // Detectar primera vez
   useEffect(() => {
     const fechaInstalacion = localStorage.getItem('cuenta-clara-fecha-instalacion');
     const usuariosCount = db.usuarios.count();
@@ -43,7 +43,6 @@ function App() {
     });
   }, []);
 
-  // Verificar licencia
   useEffect(() => {
     if (usuarioActual) {
       const licenciaGuardada = localStorage.getItem('cuenta-clara-licencia');
@@ -52,34 +51,18 @@ function App() {
       const fechaInstalacion = localStorage.getItem('cuenta-clara-fecha-instalacion');
       const fechaVencimiento = localStorage.getItem('cuenta-clara-fecha-vencimiento');
 
-      // Si es el desarrollador o tiene licencia permanente, acceso total
       if (licenciaGuardada === 'activa' && (esDev === 'true' || esPermanente === 'true')) {
         setLicenciaActiva(true);
-      }
-      // Si tiene licencia con fecha de vencimiento
-      else if (licenciaGuardada === 'activa' && fechaVencimiento) {
+      } else if (licenciaGuardada === 'activa' && fechaVencimiento) {
         const ahora = new Date().getTime();
         const vencimiento = new Date(fechaVencimiento).getTime();
-
-        if (ahora < vencimiento) {
-          setLicenciaActiva(true);
-        } else {
-          setLicenciaActiva(false);
-        }
-      }
-      // Si está en período de prueba (15 días)
-      else if (fechaInstalacion) {
+        setLicenciaActiva(ahora < vencimiento);
+      } else if (fechaInstalacion) {
         const diasTranscurridos = Math.floor(
           (new Date().getTime() - new Date(fechaInstalacion).getTime()) / (1000 * 60 * 60 * 24)
         );
-        if (diasTranscurridos <= 15) {
-          setLicenciaActiva(true);
-        } else {
-          setLicenciaActiva(false);
-        }
-      }
-      // Primera vez sin fecha, dar prueba gratis
-      else {
+        setLicenciaActiva(diasTranscurridos <= 15);
+      } else {
         localStorage.setItem('cuenta-clara-fecha-instalacion', new Date().toISOString());
         setLicenciaActiva(true);
       }
@@ -92,25 +75,19 @@ function App() {
     setCategoriaSeleccionada(null);
   };
 
-  // FLUJO 1: Primera vez
+  const toggleSidebar = () => setSidebarAbierto(!sidebarAbierto);
+
   if (primeraVez === true) {
     return (
       <ThemeProvider>
         <WelcomeScreen
-          onComenzarPrueba={() => {
-            setPrimeraVez(false);
-            window.location.reload();
-          }}
-          onActivarLicencia={() => {
-            setPrimeraVez(false);
-            window.location.reload();
-          }}
+          onComenzarPrueba={() => { setPrimeraVez(false); window.location.reload(); }}
+          onActivarLicencia={() => { setPrimeraVez(false); window.location.reload(); }}
         />
       </ThemeProvider>
     );
   }
 
-  // FLUJO 2: Sin usuario
   if (!usuarioActual) {
     return (
       <ThemeProvider>
@@ -122,7 +99,6 @@ function App() {
     );
   }
 
-  // FLUJO 3: Sin licencia
   if (!licenciaActiva) {
     return (
       <ThemeProvider>
@@ -131,22 +107,28 @@ function App() {
     );
   }
 
-  // Renderizado de vistas
   const renderVista = () => {
     switch (vistaActual) {
       case 'venta':
-        return <NuevaVenta onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} onCerrarSesion={cerrarSesion} />;
+        return (
+          <NuevaVenta
+            onVolver={() => setVistaActual('dashboard')}
+            usuarioActual={usuarioActual}
+            onCerrarSesion={cerrarSesion}
+          />
+        );
 
       case 'categorias':
-        if (categoriaSeleccionada) {
+        if (categoriaSeleccionada !== null) {
           return (
             <ProductosCategoria
-              usuarioActual={usuarioActual}
               categoriaId={categoriaSeleccionada}
+              usuarioActual={usuarioActual}
               onVolver={() => setCategoriaSeleccionada(null)}
             />
           );
         }
+
         return (
           <Categorias
             usuarioActual={usuarioActual}
@@ -155,13 +137,28 @@ function App() {
         );
 
       case 'dashboard':
-        return <Dashboard onVolver={() => setVistaActual('venta')} usuarioActual={usuarioActual} />;
+        return (
+          <Dashboard
+            usuarioActual={usuarioActual}
+            onVolver={() => setVistaActual('venta')}
+          />
+        );
 
       case 'cierre':
-        return <CierreCaja onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
+        return (
+          <CierreCaja
+            onVolver={() => setVistaActual('dashboard')}
+            usuarioActual={usuarioActual}
+          />
+        );
 
       case 'usuarios':
-        return <GestionUsuarios onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
+        return (
+          <GestionUsuarios
+            onVolver={() => setVistaActual('dashboard')}
+            usuarioActual={usuarioActual}
+          />
+        );
 
       case 'licencias':
         return <Licencias usuarioActual={usuarioActual} />;
@@ -175,9 +172,6 @@ function App() {
       case 'reportes':
         return <Reportes usuarioActual={usuarioActual} />;
 
-      case 'historial':
-        return <HistorialVentas usuarioActual={usuarioActual} />;
-
       case 'devoluciones':
         return <Devoluciones usuarioActual={usuarioActual} />;
 
@@ -190,14 +184,34 @@ function App() {
       case 'configuracion':
         return <Configuracion usuarioActual={usuarioActual} />;
 
+      case 'historial':
+        return <HistorialVentas usuarioActual={usuarioActual} />;
+
       default:
-        return <Dashboard onVolver={() => setVistaActual('venta')} usuarioActual={usuarioActual} />;
+        return (
+          <Dashboard
+            usuarioActual={usuarioActual}
+            onVolver={() => setVistaActual('venta')}
+          />
+        );
     }
   };
 
   return (
     <ThemeProvider>
-      <div className="flex">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        {/* Botón hamburguesa (solo en móvil) */}
+        <button
+          onClick={toggleSidebar}
+          className="md:hidden fixed top-4 left-4 z-30 bg-blue-600 text-white p-3 rounded-xl shadow-lg hover:bg-blue-700 transition-colors"
+          aria-label="Abrir menú"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
+        {/* Sidebar */}
         <Sidebar
           usuarioActual={usuarioActual}
           vistaActual={vistaActual}
@@ -208,8 +222,12 @@ function App() {
             }
           }}
           onCerrarSesion={cerrarSesion}
+          abierto={sidebarAbierto}
+          onToggle={toggleSidebar}
         />
-        <div className="flex-1 ml-64">
+
+        {/* Contenido principal */}
+        <div className="md:ml-64 pt-16 md:pt-0">
           {renderVista()}
         </div>
       </div>
