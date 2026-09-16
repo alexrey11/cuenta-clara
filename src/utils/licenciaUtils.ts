@@ -46,21 +46,17 @@ function firma(str: string): string {
     return out;
 }
 
-/** ¿Es el código master? (solo el dev lo conoce) */
 export function esCodigoMaster(codigo: string): boolean {
-    // Limpia: mayúsculas, quita CUALQUIER cosa que no sea letra o número
     const limpio = codigo.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    // Comparamos sin guiones (más robusto)
     const masterLimpio = getMasterCode().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    console.log('[Master Check]', {
-        inputRecibido: codigo,
-        inputLimpio: limpio,
-        masterEsperado: masterLimpio,
-        coincide: limpio === masterLimpio,
-    });
+    alert(
+        `🔍 esCodigoMaster ejecutándose\n\n` +
+        `Input limpio: [${limpio}]\n` +
+        `Master esperado: [${masterLimpio}]\n` +
+        `¿Coincide?: ${limpio === masterLimpio}`
+    );
     return limpio === masterLimpio;
 }
-
 /** Genera un código nuevo. Solo lo usa el panel del dev. */
 export function generarCodigoLicencia(): string {
     let cuerpo = '';
@@ -76,6 +72,8 @@ export function generarCodigoLicencia(): string {
 
 /** Valida un código introducido por el usuario. Acepta master también. */
 export function validarCodigoLicencia(codigo: string): boolean {
+    alert(`🔍 validarCodigoLicencia llamado\n\nInput recibido: [${codigo}]`);
+
     if (!codigo) return false;
     const limpio = codigo.trim().toUpperCase().replace(/\s+/g, '');
 
@@ -83,12 +81,16 @@ export function validarCodigoLicencia(codigo: string): boolean {
     if (esCodigoMaster(limpio)) return true;
 
     // Validación HMAC regular
-    if (!CODE_RE.test(limpio)) return false;
+    if (!CODE_RE.test(limpio)) {
+        alert(`❌ No es master Y no coincide con el formato CC-XXXX-XXXX-XXXX-XXXX`);
+        return false;
+    }
     const partes = limpio.split('-');
     const cuerpo = `${partes[1]}-${partes[2]}-${partes[3]}`;
-    return partes[4] === firma(cuerpo);
+    const firmaOk = partes[4] === firma(cuerpo);
+    alert(`🔍 Validación HMAC:\nCuerpo: ${cuerpo}\nFirma recibida: ${partes[4]}\nFirma esperada: ${firma(cuerpo)}\n¿OK?: ${firmaOk}`);
+    return firmaOk;
 }
-
 /** Firma interna usada por trialUtils para firmar registros. */
 export function firmaInterna(str: string): string {
     return firma(str);
