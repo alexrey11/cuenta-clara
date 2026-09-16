@@ -49,12 +49,6 @@ function firma(str: string): string {
 export function esCodigoMaster(codigo: string): boolean {
     const limpio = codigo.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const masterLimpio = getMasterCode().toUpperCase().replace(/[^A-Z0-9]/g, '');
-    alert(
-        `🔍 esCodigoMaster ejecutándose\n\n` +
-        `Input limpio: [${limpio}]\n` +
-        `Master esperado: [${masterLimpio}]\n` +
-        `¿Coincide?: ${limpio === masterLimpio}`
-    );
     return limpio === masterLimpio;
 }
 /** Genera un código nuevo. Solo lo usa el panel del dev. */
@@ -72,8 +66,6 @@ export function generarCodigoLicencia(): string {
 
 /** Valida un código introducido por el usuario. Acepta master también. */
 export function validarCodigoLicencia(codigo: string): boolean {
-    alert(`🔍 validarCodigoLicencia llamado\n\nInput recibido: [${codigo}]`);
-
     if (!codigo) return false;
     const limpio = codigo.trim().toUpperCase().replace(/\s+/g, '');
 
@@ -81,15 +73,10 @@ export function validarCodigoLicencia(codigo: string): boolean {
     if (esCodigoMaster(limpio)) return true;
 
     // Validación HMAC regular
-    if (!CODE_RE.test(limpio)) {
-        alert(`❌ No es master Y no coincide con el formato CC-XXXX-XXXX-XXXX-XXXX`);
-        return false;
-    }
+    if (!CODE_RE.test(limpio)) return false;
     const partes = limpio.split('-');
     const cuerpo = `${partes[1]}-${partes[2]}-${partes[3]}`;
-    const firmaOk = partes[4] === firma(cuerpo);
-    alert(`🔍 Validación HMAC:\nCuerpo: ${cuerpo}\nFirma recibida: ${partes[4]}\nFirma esperada: ${firma(cuerpo)}\n¿OK?: ${firmaOk}`);
-    return firmaOk;
+    return partes[4] === firma(cuerpo);
 }
 /** Firma interna usada por trialUtils para firmar registros. */
 export function firmaInterna(str: string): string {
