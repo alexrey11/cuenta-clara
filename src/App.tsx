@@ -33,13 +33,9 @@ function App() {
   useEffect(() => {
     const fechaInstalacion = localStorage.getItem('cuenta-clara-fecha-instalacion');
     const usuariosCount = db.usuarios.count();
-
     usuariosCount.then(count => {
-      if (!fechaInstalacion && count === 0) {
-        setPrimeraVez(true);
-      } else {
-        setPrimeraVez(false);
-      }
+      if (!fechaInstalacion && count === 0) setPrimeraVez(true);
+      else setPrimeraVez(false);
     });
   }, []);
 
@@ -58,9 +54,7 @@ function App() {
         const vencimiento = new Date(fechaVencimiento).getTime();
         setLicenciaActiva(ahora < vencimiento);
       } else if (fechaInstalacion) {
-        const diasTranscurridos = Math.floor(
-          (new Date().getTime() - new Date(fechaInstalacion).getTime()) / (1000 * 60 * 60 * 24)
-        );
+        const diasTranscurridos = Math.floor((new Date().getTime() - new Date(fechaInstalacion).getTime()) / (1000 * 60 * 60 * 24));
         setLicenciaActiva(diasTranscurridos <= 15);
       } else {
         localStorage.setItem('cuenta-clara-fecha-instalacion', new Date().toISOString());
@@ -110,97 +104,45 @@ function App() {
   const renderVista = () => {
     switch (vistaActual) {
       case 'venta':
-        return (
-          <NuevaVenta
-            onVolver={() => setVistaActual('dashboard')}
-            usuarioActual={usuarioActual}
-            onCerrarSesion={cerrarSesion}
-          />
-        );
-
+        return <NuevaVenta onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} onCerrarSesion={cerrarSesion} />;
       case 'categorias':
-        if (categoriaSeleccionada !== null) {
-          return (
-            <ProductosCategoria
-              categoriaId={categoriaSeleccionada}
-              usuarioActual={usuarioActual}
-              onVolver={() => setCategoriaSeleccionada(null)}
-            />
-          );
+        if (categoriaSeleccionada) {
+          return <ProductosCategoria categoriaId={categoriaSeleccionada!} onVolver={() => setCategoriaSeleccionada(null)} />;
         }
-
-        return (
-          <Categorias
-            usuarioActual={usuarioActual}
-            onSeleccionarCategoria={(id) => setCategoriaSeleccionada(id)}
-          />
-        );
-
+        return <Categorias onSeleccionarCategoria={(id) => setCategoriaSeleccionada(id)} />;
       case 'dashboard':
-        return (
-          <Dashboard
-            usuarioActual={usuarioActual}
-            onVolver={() => setVistaActual('venta')}
-          />
-        );
-
+        return <Dashboard onVolver={() => setVistaActual('venta')} />;
       case 'cierre':
-        return (
-          <CierreCaja
-            onVolver={() => setVistaActual('dashboard')}
-            usuarioActual={usuarioActual}
-          />
-        );
-
+        return <CierreCaja onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
       case 'usuarios':
-        return (
-          <GestionUsuarios
-            onVolver={() => setVistaActual('dashboard')}
-            usuarioActual={usuarioActual}
-          />
-        );
-
+        return <GestionUsuarios onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
       case 'licencias':
         return <Licencias usuarioActual={usuarioActual} />;
-
       case 'clientes':
         return <Clientes usuarioActual={usuarioActual} />;
-
       case 'tasas':
         return <TasasCambio usuarioActual={usuarioActual} />;
-
       case 'reportes':
         return <Reportes usuarioActual={usuarioActual} />;
-
       case 'devoluciones':
         return <Devoluciones usuarioActual={usuarioActual} />;
-
       case 'comisiones':
         return <Comisiones usuarioActual={usuarioActual} />;
-
       case 'movimientos':
         return <MovimientosInventario usuarioActual={usuarioActual} />;
-
       case 'configuracion':
         return <Configuracion usuarioActual={usuarioActual} />;
-
       case 'historial':
         return <HistorialVentas usuarioActual={usuarioActual} />;
-
       default:
-        return (
-          <Dashboard
-            usuarioActual={usuarioActual}
-            onVolver={() => setVistaActual('venta')}
-          />
-        );
+        return <Dashboard onVolver={() => setVistaActual('venta')} />;
     }
   };
 
   return (
     <ThemeProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        {/* Botón hamburguesa (solo en móvil) */}
+        {/* Botón hamburguesa (solo móvil) */}
         <button
           onClick={toggleSidebar}
           className="md:hidden fixed top-4 left-4 z-30 bg-blue-600 text-white p-3 rounded-xl shadow-lg hover:bg-blue-700 transition-colors"
@@ -211,22 +153,18 @@ function App() {
           </svg>
         </button>
 
-        {/* Sidebar */}
         <Sidebar
           usuarioActual={usuarioActual}
           vistaActual={vistaActual}
           onCambiarVista={(vista) => {
             setVistaActual(vista);
-            if (vista !== 'categorias') {
-              setCategoriaSeleccionada(null);
-            }
+            if (vista !== 'categorias') setCategoriaSeleccionada(null);
           }}
           onCerrarSesion={cerrarSesion}
           abierto={sidebarAbierto}
           onToggle={toggleSidebar}
         />
 
-        {/* Contenido principal */}
         <div className="md:ml-64 pt-16 md:pt-0">
           {renderVista()}
         </div>
