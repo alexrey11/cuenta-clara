@@ -11,12 +11,12 @@ const _secreto = () => [_a, _c, _b, _d].join('');
 
 // Master code fragmentado — cambia esto antes de compilar para producción
 const _m1 = 'CC';
-const _m2 = 'ALEX';
-const _m3 = '2003';
-const _m4 = 'PROD';
-const _m5 = '2026';
+const _m2 = 'X9K2';
+const _m3 = 'M4T7';
+const _m4 = 'R8W3';
+const _m5 = 'J5N8';
 export const getMasterCode = () => [_m1, _m2, _m3, _m4, _m5].join('-');
-// ⬆️ CC-ALEX-2003-PROD-2026
+// ⬆️ CC-X9K2-M4T7-R8W3-J5N8
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CHAR_CLASS = '[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]';
