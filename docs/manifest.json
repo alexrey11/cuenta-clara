@@ -1,6 +1,6 @@
 {
     "id": "/cuenta-clara/",
-    "name": "CuentaClara - Gestión de Negocios",
+    "name": "CuentaClara",
     "short_name": "CuentaClara",
     "description": "Sistema de gestión offline para MIPYMES",
     "start_url": "/cuenta-clara/",
@@ -17,22 +17,16 @@
     ],
     "icons": [
         {
-            "src": "/cuenta-clara/Store.png",
+            "src": "/cuenta-clara/icon-192.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any"
-        },
-        {
-            "src": "/cuenta-clara/Store.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any"
+            "purpose": "any maskable"
         },
         {
             "src": "/cuenta-clara/icon-512.png",
             "sizes": "512x512",
             "type": "image/png",
-            "purpose": "maskable"
+            "purpose": "any maskable"
         }
     ]
 }
