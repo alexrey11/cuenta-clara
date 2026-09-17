@@ -36,7 +36,7 @@ jobs:
       - name: Build web assets
         run: npm run build
 
-      - name: Setup Java 17 (Temurin)
+      - name: Setup Java 21 (Temurin)
         uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
