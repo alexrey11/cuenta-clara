@@ -24,11 +24,14 @@ jobs:
 
       - name: Diagnóstico
         run: |
-          echo "===== Verificación de archivos Capacitor ====="
-          ls -lh node_modules/@capacitor/cli/bin/ || echo "FALTA bin/"
-          ls -lh node_modules/@capacitor/cli/dist/index.js || echo "FALTA dist/index.js"
-          echo "===== Archivos .bin ====="
-          ls -lh node_modules/.bin/ | grep -i cap || echo "Sin binarios en .bin"
+          echo "===== node_modules/@capacitor ====="
+          ls -la node_modules/@capacitor/ 2>&1 || echo "NO EXISTE @capacitor"
+          echo ""
+          echo "===== node_modules/@capacitor/cli ====="
+          ls -la node_modules/@capacitor/cli/ 2>&1 || echo "NO EXISTE @capacitor/cli"
+          echo ""
+          echo "===== node_modules/.bin (cap) ====="
+          ls -la node_modules/.bin/ 2>&1 | grep -i cap || echo "SIN binarios cap en .bin"
 
       - name: Build web assets
         run: npm run build
@@ -39,8 +42,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Instalar Capacitor CLI global
+        run: npm install -g @capacitor/cli@latest
+
       - name: Sync Capacitor
-        run: node node_modules/@capacitor/cli/bin/capacitor sync android
+        run: cap sync android
 
       - name: Compilar APK
         working-directory: android
@@ -48,7 +54,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Verificar APK
+      - name: Verificar APK generado
         run: ls -lh android/app/build/outputs/apk/debug/
 
       - name: Subir APK como artifact
