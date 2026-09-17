@@ -20,7 +20,16 @@ jobs:
           cache: 'npm'
 
       - name: Instalar dependencias
-        run: npm ci
+        run: npm install --no-audit --no-fund
+
+      - name: Diagnóstico Capacitor
+        run: |
+          echo "=== node_modules/.bin ==="
+          ls node_modules/.bin/ | grep -i cap || echo "NO HAY BINARIO CAP"
+          echo "=== Paquetes Capacitor ==="
+          ls node_modules/@capacitor/ || echo "NO HAY CARPETA @capacitor"
+          echo "=== Versión directa ==="
+          ./node_modules/.bin/cap --version || echo "FALLA EL BINARIO"
 
       - name: Build web assets
         run: npm run build
@@ -32,13 +41,16 @@ jobs:
           java-version: '17'
 
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: ./node_modules/.bin/cap sync android
 
       - name: Compilar APK
         working-directory: android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
+
+      - name: Verificar APK
+        run: ls -lh android/app/build/outputs/apk/debug/
 
       - name: Subir APK como artifact
         uses: actions/upload-artifact@v6
