@@ -2,12 +2,6 @@
 
 buildscript {
     repositories {
-        maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://maven.aliyun.com/repository/google' }
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-        maven { url 'https://maven.aliyun.com/repository/central' }
-        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
-        maven { url 'https://repo.huaweicloud.com/repository/maven/' }
         google()
         mavenCentral()
     }
@@ -21,12 +15,6 @@ apply from: "variables.gradle"
 
 allprojects {
     repositories {
-        maven { url 'https://maven.aliyun.com/repository/public' }
-        maven { url 'https://maven.aliyun.com/repository/google' }
-        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-        maven { url 'https://maven.aliyun.com/repository/central' }
-        maven { url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
-        maven { url 'https://repo.huaweicloud.com/repository/maven/' }
         google()
         mavenCentral()
     }
