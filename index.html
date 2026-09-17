@@ -3,26 +3,19 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/png" href="/cuenta-clara/icon-512.png" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>CuentaClara</title>
-  <link rel="manifest" href="/cuenta-clara/manifest.json">
+  <link rel="icon" type="image/png" href="./icon-512.png" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#1e40af">
-  <link rel="apple-touch-icon" href="/cuenta-clara/icon-512.png">
+  <meta name="description" content="CuentaClara - Gestión de negocios offline">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icon-512.png">
+  <title>CuentaClara</title>
 </head>
 
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/cuenta-clara/sw.js')
-          .then(reg => console.log('✅ Service Worker registrado:', reg.scope))
-          .catch(err => console.log('❌ Error al registrar SW:', err));
-      });
-    }
-  </script>
 </body>
 
 </html>
