@@ -22,14 +22,13 @@ jobs:
       - name: Instalar dependencias
         run: npm install --no-audit --no-fund
 
-      - name: Diagnóstico Capacitor
+      - name: Diagnóstico
         run: |
-          echo "=== node_modules/.bin ==="
-          ls node_modules/.bin/ | grep -i cap || echo "NO HAY BINARIO CAP"
-          echo "=== Paquetes Capacitor ==="
-          ls node_modules/@capacitor/ || echo "NO HAY CARPETA @capacitor"
-          echo "=== Versión directa ==="
-          ./node_modules/.bin/cap --version || echo "FALLA EL BINARIO"
+          echo "===== Verificación de archivos Capacitor ====="
+          ls -lh node_modules/@capacitor/cli/bin/ || echo "FALTA bin/"
+          ls -lh node_modules/@capacitor/cli/dist/index.js || echo "FALTA dist/index.js"
+          echo "===== Archivos .bin ====="
+          ls -lh node_modules/.bin/ | grep -i cap || echo "Sin binarios en .bin"
 
       - name: Build web assets
         run: npm run build
@@ -41,7 +40,7 @@ jobs:
           java-version: '17'
 
       - name: Sync Capacitor
-        run: ./node_modules/.bin/cap sync android
+        run: node node_modules/@capacitor/cli/bin/capacitor sync android
 
       - name: Compilar APK
         working-directory: android
