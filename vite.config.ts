@@ -3,9 +3,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  base: '/cuenta-clara/', // Importante para GitHub Pages
+  // Relativo: funciona en GitHub Pages Y en Capacitor (Android/iOS)
+  base: './',
   build: {
-    outDir: 'docs', // <-- ESTO LE DICE A VITE QUE GUARDE AQUÍ
+    outDir: 'docs',
   },
   plugins: [
     react(),
