@@ -155,6 +155,7 @@ export interface ConfigEntry {
 
 /** Trazas de seguridad — registro de eventos importantes */
 export type TipoLogSeguridad =
+
     | 'login_ok'
     | 'login_fallido'
     | 'logout'
@@ -168,7 +169,13 @@ export type TipoLogSeguridad =
     | 'datos_borrados'
     | 'backup_exportado'
     | 'backup_importado'
-    | 'tasa_editada';
+    | 'tasa_editada'
+    | 'categoria_creada'
+    | 'categoria_editada'
+    | 'categoria_eliminada'
+    | 'producto_creado'
+    | 'producto_editado'
+    | 'producto_eliminado';
 
 export interface LogSeguridad {
     id?: number;

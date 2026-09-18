@@ -1,8 +1,8 @@
-// ============ src/Categorias.tsx ============
 import { useState, useEffect, useRef } from 'react';
 import { db } from './db';
-import type { Categoria } from './db';
+import type { Categoria, Usuario } from './db';
 import { comprimirImagen } from './utils/imageUtils';
+import { registrarLog } from './utils/logger';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     btnPrimary, input, label,
@@ -11,15 +11,17 @@ import {
 
 interface CategoriasProps {
     onSeleccionarCategoria: (categoriaId: number) => void;
+    usuarioActual: Usuario;
 }
 
-export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) {
+export default function Categorias({ onSeleccionarCategoria, usuarioActual }: CategoriasProps) {
     const [categorias, setCategorias] = useState<Categoria[]>([]);
     const [modalAbierto, setModalAbierto] = useState(false);
     const [categoriaEditando, setCategoriaEditando] = useState<Categoria | null>(null);
     const [nombre, setNombre] = useState('');
     const [descripcion, setDescripcion] = useState('');
     const [imagenBase64, setImagenBase64] = useState('');
+    const [eliminando, setEliminando] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { cargarCategorias(); }, []);
@@ -31,16 +33,40 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
         if (file) setImagenBase64(await comprimirImagen(file, 400));
     };
 
+    const abrirCrear = () => {
+        setCategoriaEditando(null);
+        setNombre('');
+        setDescripcion('');
+        setImagenBase64('');
+        setModalAbierto(true);
+    };
+
     const guardarCategoria = async () => {
         if (!nombre.trim()) { alert('Ingresa un nombre'); return; }
+
         const datos = {
             nombre: nombre.trim(),
             descripcion: descripcion.trim() || undefined,
             imagen: imagenBase64 || undefined,
             creadoEn: categoriaEditando ? categoriaEditando.creadoEn : new Date(),
         };
-        if (categoriaEditando) await db.categorias.update(categoriaEditando.id!, datos);
-        else await db.categorias.add(datos);
+
+        if (categoriaEditando) {
+            await db.categorias.update(categoriaEditando.id!, datos);
+            await registrarLog('categoria_editada', `Categoría "${datos.nombre}" editada`, {
+                usuarioId: usuarioActual.id,
+                usuarioNombre: usuarioActual.nombre,
+                detalles: `ID: ${categoriaEditando.id}`,
+            });
+        } else {
+            const id = await db.categorias.add(datos);
+            await registrarLog('categoria_creada', `Categoría "${datos.nombre}" creada`, {
+                usuarioId: usuarioActual.id,
+                usuarioNombre: usuarioActual.nombre,
+                detalles: `ID: ${id}`,
+            });
+        }
+
         limpiarFormulario();
         cargarCategorias();
     };
@@ -53,8 +79,28 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
         setModalAbierto(true);
     };
 
-    const eliminarCategoria = async (id: number) => {
-        if (confirm('¿Eliminar esta categoría?')) { await db.categorias.delete(id); cargarCategorias(); }
+    const confirmarEliminar = async () => {
+        if (!eliminando) return;
+        const cat = categorias.find(c => c.id === eliminando);
+        if (!cat) return;
+
+        // Verificar si tiene productos
+        const productosAsociados = await db.productos.where('categoriaId').equals(eliminando).count();
+        if (productosAsociados > 0) {
+            alert(`No se puede eliminar: hay ${productosAsociados} productos en esta categoría.\n\nMueve o elimina primero esos productos.`);
+            setEliminando(null);
+            return;
+        }
+
+        await db.categorias.delete(eliminando);
+        await registrarLog('categoria_eliminada', `Categoría "${cat.nombre}" eliminada`, {
+            usuarioId: usuarioActual.id,
+            usuarioNombre: usuarioActual.nombre,
+            detalles: `ID: ${eliminando}`,
+        });
+
+        setEliminando(null);
+        cargarCategorias();
     };
 
     const limpiarFormulario = () => {
@@ -62,6 +108,8 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
         setCategoriaEditando(null); setModalAbierto(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
+
+    const categoriaAEliminar = eliminando ? categorias.find(c => c.id === eliminando) : null;
 
     return (
         <div className={pageWrap}>
@@ -78,37 +126,60 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
                                 <p className="truncate text-xs text-gray-400 md:text-sm">{categorias.length} categorías · Organiza tus productos</p>
                             </div>
                         </div>
-                        <button onClick={() => setModalAbierto(true)} className={btnPrimary}>+ Nueva</button>
+                        <button onClick={abrirCrear} className={btnPrimary}>+ Nueva</button>
                     </div>
                 </div>
 
                 {categorias.length === 0 ? (
                     <div className={`${card} p-6`}><EmptyState icon="📂" texto="Aún no hay categorías. Crea la primera." /></div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                         {categorias.map((cat) => (
-                            <div key={cat.id} className={`${card} cc-fade-up group overflow-hidden transition-transform duration-200 hover:-translate-y-0.5`}>
-                                <div className="relative flex h-32 items-center justify-center overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 md:h-40">
+                            <div key={cat.id} className={`${card} cc-fade-up flex flex-col overflow-hidden`}>
+                                {/* Imagen */}
+                                <div className="relative flex h-40 items-center justify-center overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900">
                                     {cat.imagen
                                         ? <img src={cat.imagen} alt={cat.nombre} className="h-full w-full object-cover" />
-                                        : <span className="text-5xl opacity-30">📦</span>}
-                                    <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                                        <button onClick={() => editarCategoria(cat)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-sm text-blue-300 backdrop-blur-sm hover:border-blue-400/60 hover:bg-blue-500/20">✏️</button>
-                                        <button onClick={() => eliminarCategoria(cat.id!)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-sm text-rose-300 backdrop-blur-sm hover:border-rose-400/60 hover:bg-rose-500/20">🗑️</button>
-                                    </div>
+                                        : <span className="text-6xl opacity-30">📦</span>}
                                 </div>
-                                <div className="p-3 md:p-4">
-                                    <h3 className="mb-1 truncate text-sm font-bold text-gray-100 md:text-base">{cat.nombre}</h3>
-                                    {cat.descripcion && <p className="mb-2 line-clamp-2 text-xs text-gray-400">{cat.descripcion}</p>}
-                                    <button onClick={() => onSeleccionarCategoria(cat.id!)} className="w-full rounded-lg border border-blue-400/20 bg-blue-500/10 py-2 text-xs font-bold text-blue-300 transition-colors duration-150 hover:bg-blue-500/20 md:text-sm">
+
+                                {/* Info */}
+                                <div className="flex flex-1 flex-col p-4">
+                                    <h3 className="mb-1 truncate text-base font-bold text-gray-100">{cat.nombre}</h3>
+                                    {cat.descripcion && (
+                                        <p className="mb-3 line-clamp-2 text-xs text-gray-400">{cat.descripcion}</p>
+                                    )}
+
+                                    {/* Botón principal: ver productos */}
+                                    <button
+                                        onClick={() => onSeleccionarCategoria(cat.id!)}
+                                        className="mb-3 w-full rounded-xl border border-blue-400/20 bg-blue-500/10 py-2.5 text-sm font-bold text-blue-300 transition-colors duration-150 hover:bg-blue-500/20"
+                                    >
                                         Ver productos →
                                     </button>
+
+                                    {/* Botones editar/eliminar SIEMPRE VISIBLES */}
+                                    <div className="mt-auto flex gap-2">
+                                        <button
+                                            onClick={() => editarCategoria(cat)}
+                                            className="flex-1 rounded-lg border border-amber-400/25 bg-amber-500/10 py-2 text-xs font-bold text-amber-300 transition-colors duration-150 hover:bg-amber-500/20 md:text-sm"
+                                        >
+                                            ✏️ Editar
+                                        </button>
+                                        <button
+                                            onClick={() => setEliminando(cat.id!)}
+                                            className="rounded-lg border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300 transition-colors duration-150 hover:bg-rose-500/20 md:text-sm"
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
 
+                {/* ===== Modal Crear/Editar ===== */}
                 {modalAbierto && (
                     <div className={modalOverlay}>
                         <div className={modalPanel}>
@@ -132,16 +203,46 @@ export default function Categorias({ onSeleccionarCategoria }: CategoriasProps) 
                                 </div>
                                 <div>
                                     <label className={label}>Nombre *</label>
-                                    <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className={input} />
+                                    <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className={input} autoFocus />
                                 </div>
                                 <div>
                                     <label className={label}>Descripción</label>
                                     <textarea value={descripcion} onChange={(e) => setDescripcion(e.target.value)} className={input} rows={2} />
                                 </div>
                                 <div className="flex gap-3 border-t border-white/10 pt-4">
-                                    <button onClick={limpiarFormulario} className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">Cancelar</button>
+                                    <button onClick={limpiarFormulario} className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">
+                                        Cancelar
+                                    </button>
                                     <button onClick={guardarCategoria} className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-base font-bold text-white shadow-md shadow-blue-500/25 transition-transform hover:-translate-y-0.5">
                                         {categoriaEditando ? 'Guardar' : 'Crear'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ===== Modal Confirmar Eliminar ===== */}
+                {categoriaAEliminar && (
+                    <div className={modalOverlay}>
+                        <div className={modalPanel}>
+                            <div className="flex items-center justify-between bg-gradient-to-r from-rose-500 to-red-600 px-4 py-3 md:px-6 md:py-4">
+                                <h2 className={modalTitle}>🗑️ Eliminar categoría</h2>
+                                <button onClick={() => setEliminando(null)} className={modalClose}>&times;</button>
+                            </div>
+                            <div className="space-y-4 p-4 md:p-6">
+                                <p className="text-sm text-gray-300">
+                                    ¿Seguro que quieres eliminar la categoría <strong className="text-gray-100">"{categoriaAEliminar.nombre}"</strong>?
+                                </p>
+                                <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-200">
+                                    ⚠️ Esta acción no se puede deshacer. Si la categoría tiene productos, no se eliminará.
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setEliminando(null)} className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">
+                                        Cancelar
+                                    </button>
+                                    <button onClick={confirmarEliminar} className="flex-1 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 py-3 text-base font-bold text-white shadow-md shadow-rose-500/25 transition-transform hover:-translate-y-0.5">
+                                        Eliminar
                                     </button>
                                 </div>
                             </div>

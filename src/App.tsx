@@ -172,10 +172,9 @@ function App() {
         return <NuevaVenta onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} onCerrarSesion={cerrarSesion} />;
       case 'categorias':
         if (categoriaSeleccionada) {
-          return <ProductosCategoria categoriaId={categoriaSeleccionada} onVolver={() => setCategoriaSeleccionada(null)} />;
+          return <ProductosCategoria categoriaId={categoriaSeleccionada} onVolver={() => setCategoriaSeleccionada(null)} usuarioActual={usuarioActual} />;
         }
-        return <Categorias onSeleccionarCategoria={(id) => setCategoriaSeleccionada(id)} />;
-      case 'dashboard':
+        return <Categorias onSeleccionarCategoria={(id) => setCategoriaSeleccionada(id)} usuarioActual={usuarioActual} />;
         return <Dashboard onVolver={() => setVistaActual('venta')} />;
       case 'cierre':
         return <CierreCaja onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;

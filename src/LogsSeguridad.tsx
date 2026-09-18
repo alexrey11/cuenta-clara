@@ -25,6 +25,12 @@ const TIPO_INFO: Record<TipoLogSeguridad, { icon: string; label: string; tile: s
     backup_exportado: { icon: '📤', label: 'Backup exportado', tile: 'from-sky-500 to-blue-600', pill: 'bg-sky-500/15 text-sky-300 ring-1 ring-sky-400/25' },
     backup_importado: { icon: '📥', label: 'Backup importado', tile: 'from-emerald-500 to-teal-600', pill: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' },
     tasa_editada: { icon: '💱', label: 'Tasa editada', tile: 'from-cyan-500 to-blue-600', pill: 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-400/25' },
+    categoria_creada: { icon: '📂', label: 'Categoría creada', tile: 'from-blue-500 to-indigo-600', pill: 'bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/25' },
+    categoria_editada: { icon: '✏️', label: 'Categoría editada', tile: 'from-cyan-500 to-blue-600', pill: 'bg-cyan-500/15 text-cyan-300 ring-1 ring-cyan-400/25' },
+    categoria_eliminada: { icon: '🗑️', label: 'Categoría eliminada', tile: 'from-rose-500 to-red-600', pill: 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25' },
+    producto_creado: { icon: '📦', label: 'Producto creado', tile: 'from-emerald-500 to-teal-600', pill: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' },
+    producto_editado: { icon: '✏️', label: 'Producto editado', tile: 'from-amber-500 to-orange-600', pill: 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/25' },
+    producto_eliminado: { icon: '🗑️', label: 'Producto eliminado', tile: 'from-rose-500 to-red-600', pill: 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25' },
 };
 
 const getTipo = (t: TipoLogSeguridad) =>

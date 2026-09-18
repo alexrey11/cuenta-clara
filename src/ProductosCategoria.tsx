@@ -1,8 +1,8 @@
-// ============ src/ProductosCategoria.tsx ============
 import { useState, useEffect, useRef } from 'react';
 import { db } from './db';
 import { comprimirImagen } from './utils/imageUtils';
-import type { Producto, Categoria } from './db';
+import { registrarLog } from './utils/logger';
+import type { Producto, Categoria, Usuario } from './db';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     btnPrimary, input, label,
@@ -12,9 +12,10 @@ import {
 interface ProductosCategoriaProps {
     categoriaId: number;
     onVolver: () => void;
+    usuarioActual: Usuario;
 }
 
-export default function ProductosCategoria({ categoriaId, onVolver }: ProductosCategoriaProps) {
+export default function ProductosCategoria({ categoriaId, onVolver, usuarioActual }: ProductosCategoriaProps) {
     const [categoria, setCategoria] = useState<Categoria | null>(null);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -29,6 +30,7 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
     const [fechaVencimiento, setFechaVencimiento] = useState('');
     const [codigoBarras, setCodigoBarras] = useState('');
     const [imagenBase64, setImagenBase64] = useState('');
+    const [eliminando, setEliminando] = useState<number | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => { cargarDatos(); }, [categoriaId]);
@@ -45,6 +47,16 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
         if (file) setImagenBase64(await comprimirImagen(file, 600));
     };
 
+    const abrirCrear = () => {
+        setProductoEditando(null);
+        setNombre(''); setDescripcion('');
+        setPrecioCompra(''); setPrecioVenta('');
+        setStockActual(''); setStockMinimo('');
+        setUnidadMedida('unidades'); setFechaVencimiento('');
+        setCodigoBarras(''); setImagenBase64('');
+        setModalAbierto(true);
+    };
+
     const guardarProducto = async () => {
         if (!nombre.trim() || !precioVenta || !stockActual || !precioCompra) {
             alert('Completa nombre, precio compra, precio venta y stock');
@@ -55,9 +67,11 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
         if (pc >= pv && !confirm('⚠️ Precio compra >= precio venta. ¿Continuar?')) return;
 
         const datos = {
-            categoriaId, nombre: nombre.trim(),
+            categoriaId,
+            nombre: nombre.trim(),
             descripcion: descripcion.trim() || undefined,
-            precioCompra: pc, precioVenta: pv,
+            precioCompra: pc,
+            precioVenta: pv,
             stockActual: parseInt(stockActual),
             stockMinimo: parseInt(stockMinimo) || 0,
             unidadMedida,
@@ -66,15 +80,31 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
             imagen: imagenBase64 || undefined,
             fechaCreacion: productoEditando ? productoEditando.fechaCreacion : new Date(),
         };
-        if (productoEditando) await db.productos.update(productoEditando.id!, datos);
-        else await db.productos.add(datos);
-        limpiarFormulario(); cargarDatos();
+
+        if (productoEditando) {
+            await db.productos.update(productoEditando.id!, datos);
+            await registrarLog('producto_editado', `Producto "${datos.nombre}" editado`, {
+                usuarioId: usuarioActual.id,
+                usuarioNombre: usuarioActual.nombre,
+                detalles: `ID: ${productoEditando.id} | Stock: ${productoEditando.stockActual} → ${datos.stockActual}`,
+            });
+        } else {
+            const id = await db.productos.add(datos);
+            await registrarLog('producto_creado', `Producto "${datos.nombre}" creado`, {
+                usuarioId: usuarioActual.id,
+                usuarioNombre: usuarioActual.nombre,
+                detalles: `ID: ${id} | Precio venta: $${datos.precioVenta} | Stock: ${datos.stockActual}`,
+            });
+        }
+
+        limpiarFormulario();
+        cargarDatos();
     };
 
-    const editarProducto = (prod: Producto, e: React.MouseEvent) => {
-        e.stopPropagation();
+    const editarProducto = (prod: Producto) => {
         setProductoEditando(prod);
-        setNombre(prod.nombre); setDescripcion(prod.descripcion || '');
+        setNombre(prod.nombre);
+        setDescripcion(prod.descripcion || '');
         setPrecioCompra(prod.precioCompra?.toString() || '0');
         setPrecioVenta(prod.precioVenta?.toString() || '');
         setStockActual(prod.stockActual.toString());
@@ -86,9 +116,28 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
         setModalAbierto(true);
     };
 
-    const eliminarProducto = async (id: number, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (confirm('¿Eliminar este producto?')) { await db.productos.delete(id); cargarDatos(); }
+    const confirmarEliminar = async () => {
+        if (!eliminando) return;
+        const prod = productos.find(p => p.id === eliminando);
+        if (!prod) return;
+
+        // Si tiene ventas asociadas, avisar
+        const ventasAsociadas = await db.ventas
+            .filter(v => v.items?.some(i => i.productoId === eliminando) || v.productoId === eliminando)
+            .count();
+        if (ventasAsociadas > 0) {
+            if (!confirm(`Este producto tiene ${ventasAsociadas} venta(s) registrada(s). ¿Eliminar de todas formas?\n\n(El historial de ventas se conserva.)`)) return;
+        }
+
+        await db.productos.delete(eliminando);
+        await registrarLog('producto_eliminado', `Producto "${prod.nombre}" eliminado`, {
+            usuarioId: usuarioActual.id,
+            usuarioNombre: usuarioActual.nombre,
+            detalles: `ID: ${eliminando} | Precio venta: $${prod.precioVenta} | Stock al eliminar: ${prod.stockActual}`,
+        });
+
+        setEliminando(null);
+        cargarDatos();
     };
 
     const limpiarFormulario = () => {
@@ -98,6 +147,8 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
         setImagenBase64(''); setModalAbierto(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
+
+    const productoAEliminar = eliminando ? productos.find(p => p.id === eliminando) : null;
 
     return (
         <div className={pageWrap}>
@@ -115,41 +166,65 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
                             <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>{categoria?.nombre || 'Productos'}</h1>
                             <p className="truncate text-xs text-gray-400 md:text-sm">{productos.length} productos</p>
                         </div>
-                        <button onClick={() => setModalAbierto(true)} className={btnPrimary}>+ Nuevo</button>
+                        <button onClick={abrirCrear} className={btnPrimary}>+ Nuevo</button>
                     </div>
                 </div>
 
                 {productos.length === 0 ? (
                     <div className={`${card} p-6`}><EmptyState icon="📦" texto="Sin productos en esta categoría" /></div>
                 ) : (
-                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                         {productos.map((prod) => {
                             const bajo = prod.stockActual <= prod.stockMinimo;
                             return (
-                                <div key={prod.id} className={`${card} cc-fade-up group overflow-hidden transition-transform duration-200 hover:-translate-y-0.5`}>
-                                    <div className="relative h-32 overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 md:h-40">
+                                <div key={prod.id} className={`${card} cc-fade-up flex flex-col overflow-hidden`}>
+                                    {/* Imagen */}
+                                    <div className="relative h-40 overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900">
                                         {prod.imagen
                                             ? <img src={prod.imagen} alt={prod.nombre} className="h-full w-full object-cover" />
-                                            : <div className="flex h-full w-full items-center justify-center"><span className="text-4xl opacity-30 md:text-5xl">📦</span></div>}
-                                        <div className={`absolute top-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-black text-white ${bajo ? 'bg-rose-500' : 'bg-emerald-500'}`}>
+                                            : <div className="flex h-full w-full items-center justify-center"><span className="text-6xl opacity-30">📦</span></div>}
+
+                                        {/* Badge de stock siempre visible */}
+                                        <div className={`absolute top-2 left-2 rounded-full px-2.5 py-1 text-xs font-black text-white shadow-lg ${bajo ? 'bg-rose-500' : 'bg-emerald-500'}`}>
                                             {prod.stockActual} {prod.unidadMedida}
                                         </div>
-                                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                            <button onClick={(e) => editarProducto(prod, e)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-xs text-blue-300 hover:bg-blue-500/20 md:h-8 md:w-8 md:text-sm">✏️</button>
-                                            <button onClick={(e) => eliminarProducto(prod.id!, e)} className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-slate-900/80 text-xs text-rose-300 hover:bg-rose-500/20 md:h-8 md:w-8 md:text-sm">🗑️</button>
-                                        </div>
                                     </div>
-                                    <div className="p-2 md:p-3">
-                                        <h3 className="mb-1 truncate text-xs font-bold text-gray-100 md:text-sm">{prod.nombre}</h3>
-                                        <div className="space-y-0.5">
-                                            <div className="flex justify-between text-[10px] md:text-xs">
+
+                                    {/* Info */}
+                                    <div className="flex flex-1 flex-col p-4">
+                                        <h3 className="mb-2 truncate text-base font-bold text-gray-100">{prod.nombre}</h3>
+
+                                        <div className="mb-3 space-y-1">
+                                            <div className="flex justify-between text-xs">
                                                 <span className="text-gray-500">Compra:</span>
                                                 <span className="font-semibold text-gray-300">${(prod.precioCompra || 0).toFixed(2)}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-[10px] text-gray-500 md:text-xs">Venta:</span>
-                                                <span className="text-sm font-black text-blue-300 md:text-base">${(prod.precioVenta || 0).toFixed(2)}</span>
+                                                <span className="text-xs text-gray-500">Venta:</span>
+                                                <span className="text-lg font-black text-blue-300">${(prod.precioVenta || 0).toFixed(2)}</span>
                                             </div>
+                                            {prod.codigoBarras && (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-gray-500">Código:</span>
+                                                    <span className="truncate font-mono text-gray-400">{prod.codigoBarras}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Botones editar/eliminar SIEMPRE VISIBLES */}
+                                        <div className="mt-auto flex gap-2">
+                                            <button
+                                                onClick={() => editarProducto(prod)}
+                                                className="flex-1 rounded-lg border border-amber-400/25 bg-amber-500/10 py-2 text-xs font-bold text-amber-300 transition-colors duration-150 hover:bg-amber-500/20 md:text-sm"
+                                            >
+                                                ✏️ Editar
+                                            </button>
+                                            <button
+                                                onClick={() => setEliminando(prod.id!)}
+                                                className="rounded-lg border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-300 transition-colors duration-150 hover:bg-rose-500/20 md:text-sm"
+                                            >
+                                                🗑️
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -158,6 +233,7 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
                     </div>
                 )}
 
+                {/* ===== Modal Crear/Editar ===== */}
                 {modalAbierto && (
                     <div className={modalOverlay}>
                         <div className={`${modalPanel} md:max-w-2xl`}>
@@ -183,7 +259,7 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
                                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                     <div className="md:col-span-2">
                                         <label className={label}>Nombre *</label>
-                                        <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className={input} />
+                                        <input type="text" value={nombre} onChange={(e) => setNombre(e.target.value)} className={input} autoFocus />
                                     </div>
                                     <div>
                                         <label className={label}>💰 Precio Compra *</label>
@@ -219,6 +295,38 @@ export default function ProductosCategoria({ categoriaId, onVolver }: ProductosC
                                     <button onClick={guardarProducto}
                                         className="flex-1 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 py-3 text-base font-bold text-white shadow-md shadow-emerald-500/25 transition-transform hover:-translate-y-0.5">
                                         {productoEditando ? 'Guardar' : 'Crear'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ===== Modal Confirmar Eliminar ===== */}
+                {productoAEliminar && (
+                    <div className={modalOverlay}>
+                        <div className={modalPanel}>
+                            <div className="flex items-center justify-between bg-gradient-to-r from-rose-500 to-red-600 px-4 py-3 md:px-6 md:py-4">
+                                <h2 className={modalTitle}>🗑️ Eliminar producto</h2>
+                                <button onClick={() => setEliminando(null)} className={modalClose}>&times;</button>
+                            </div>
+                            <div className="space-y-4 p-4 md:p-6">
+                                <p className="text-sm text-gray-300">
+                                    ¿Seguro que quieres eliminar <strong className="text-gray-100">"{productoAEliminar.nombre}"</strong>?
+                                </p>
+                                <div className="rounded-xl border border-white/10 bg-slate-800/50 p-3 text-xs text-gray-400">
+                                    <p>Stock actual: <strong className="text-gray-200">{productoAEliminar.stockActual}</strong></p>
+                                    <p>Precio venta: <strong className="text-gray-200">${productoAEliminar.precioVenta}</strong></p>
+                                </div>
+                                <p className="rounded-xl border border-amber-400/25 bg-amber-500/10 p-3 text-xs text-amber-200">
+                                    ⚠️ Esta acción no se puede deshacer. El historial de ventas se conserva.
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setEliminando(null)} className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">
+                                        Cancelar
+                                    </button>
+                                    <button onClick={confirmarEliminar} className="flex-1 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 py-3 text-base font-bold text-white shadow-md shadow-rose-500/25 transition-transform hover:-translate-y-0.5">
+                                        Eliminar
                                     </button>
                                 </div>
                             </div>
