@@ -1,0 +1,104 @@
+name: Build Desktop (Tauri)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'vite.config.ts'
+      - 'index.html'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: ''
+            label: 'Windows'
+          - platform: 'ubuntu-22.04'
+            args: ''
+            label: 'Linux'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache de Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Instalar dependencias Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Instalar dependencias npm
+        run: npm install --no-audit --no-fund
+
+      - name: Build web assets
+        run: npm run build
+
+      - name: Build Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: ${{ matrix.args }}
+
+      - name: Listar artifacts generados
+        if: always()
+        shell: bash
+        run: |
+          echo "=== Archivos en bundle ==="
+          ls -la src-tauri/target/release/bundle/ 2>/dev/null || echo "Sin bundle"
+          find src-tauri/target/release/bundle -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.AppImage" \) 2>/dev/null || echo "Sin instaladores"
+
+      - name: Subir instalador Windows
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v6
+        with:
+          name: cuenta-clara-windows
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Subir instalador Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: actions/upload-artifact@v6
+        with:
+          name: cuenta-clara-linux
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          retention-days: 30
+          if-no-files-found: warn
