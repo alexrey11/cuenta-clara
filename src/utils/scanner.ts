@@ -2,17 +2,14 @@
 // Servicio de escáner: soporta cámara (ML Kit) y Bluetooth HID
 // ============================================================
 
-// ===== DETECCIÓN DE ESCÁNER BLUETOOTH (KEYBOARD WEDGE) =====
+import { Capacitor } from '@capacitor/core';
+import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
 
-// Los escáneres Bluetooth HID se comportan como teclados:
-// envían los caracteres del código + Enter al final.
-// Detectamos esto midiendo la velocidad de escritura:
-// un humano no escribe más de ~15 caracteres por segundo.
-// Un escáner escribe 100+ caracteres en menos de 100ms.
+// ===== DETECCIÓN DE ESCÁNER BLUETOOTH (KEYBOARD WEDGE) =====
 
 let buffer = '';
 let ultimaTeclaTiempo = 0;
-const VELOCIDAD_MINIMA_MS = 50; // si el intervalo entre teclas es < 50ms, es un escáner
+const VELOCIDAD_MINIMA_MS = 50;
 
 export interface ScannerListener {
     (codigo: string): void;
@@ -27,31 +24,26 @@ export function onScanBluetooth(callback: ScannerListener): () => void {
     };
 }
 
-export function iniciarEscuchaBluetooth() {
-    if (typeof window === 'undefined') return;
+export function iniciarEscuchaBluetooth(): () => void {
+    if (typeof window === 'undefined') return () => { };
 
     const handler = (e: KeyboardEvent) => {
         const ahora = Date.now();
 
-        // Si pasó mucho tiempo desde la última tecla, reiniciar buffer
         if (ahora - ultimaTeclaTiempo > 100) {
             buffer = '';
         }
 
-        // Si es una tecla imprimible (letra, número, símbolo)
         if (e.key.length === 1) {
             const intervalo = ahora - ultimaTeclaTiempo;
             ultimaTeclaTiempo = ahora;
             buffer += e.key;
 
-            // Si el intervalo entre teclas es muy corto, es un escáner
             if (intervalo < VELOCIDAD_MINIMA_MS || buffer.length > 8) {
-                // Prevenir que el carácter se escriba en un input
                 e.preventDefault();
             }
         }
 
-        // Enter = fin del escaneo
         if (e.key === 'Enter' && buffer.length >= 4) {
             const codigo = buffer.trim();
             buffer = '';
@@ -65,23 +57,16 @@ export function iniciarEscuchaBluetooth() {
     };
 
     window.addEventListener('keydown', handler);
-
-    // Retornar función para limpiar
-    return () => {
-        window.removeEventListener('keydown', handler);
-    };
+    return () => window.removeEventListener('keydown', handler);
 }
 
-// ===== DETECCIÓN DE CÁMARA (ML KIT) =====
-
-import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
+// ===== CÁMARA (ML KIT) =====
 
 export async function pedirPermisoCamara(): Promise<boolean> {
     try {
         const { camera } = await BarcodeScanner.checkPermissions();
         if (camera === 'granted') return true;
         if (camera === 'denied') {
-            // Abrir ajustes del sistema
             await BarcodeScanner.openSettings();
             return false;
         }
@@ -98,19 +83,37 @@ export async function escanearConCamara(): Promise<string | null> {
         const permiso = await pedirPermisoCamara();
         if (!permiso) return null;
 
-        // El plugin renderiza la cámara DETRÁS del webview.
-        // El webview debe ser transparente.
-        document.body.classList.add('scanner-activo');
+        // En Android, verificar que el módulo de Google Barcode Scanner esté instalado
+        if (Capacitor.getPlatform() === 'android') {
+            const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+
+            if (!available) {
+                // El módulo no está instalado → descargarlo
+                await BarcodeScanner.installGoogleBarcodeScannerModule();
+                // Esperar un momento a que se complete
+                await new Promise(r => setTimeout(r, 1500));
+            }
+        }
 
         const { barcodes } = await BarcodeScanner.scan();
 
-        document.body.classList.remove('scanner-activo');
-
         if (barcodes.length === 0) return null;
         return barcodes[0].rawValue || null;
-    } catch (e) {
-        document.body.classList.remove('scanner-activo');
+    } catch (e: any) {
         console.error('[scanner] Error escaneando:', e);
+
+        const msg = e?.message || String(e);
+        if (msg.includes('Failed to scan code')) {
+            alert(
+                '⚠️ El escáner de Google no está listo.\n\n' +
+                'Conéctate a internet una vez, abre la app y espera 10 segundos. ' +
+                'Después funcionará offline.'
+            );
+        } else if (msg.includes('cancel') || msg.includes('Cancel')) {
+            // El usuario cerró la cámara, no hacemos nada
+        } else {
+            alert(`No se pudo abrir la cámara: ${msg}`);
+        }
         return null;
     }
 }
