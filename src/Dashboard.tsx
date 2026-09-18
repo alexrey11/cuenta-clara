@@ -1,4 +1,3 @@
-// ============ Dashboard.tsx (optimizado) ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Venta, Producto } from './db';
@@ -6,29 +5,15 @@ import { Line, Bar, Doughnut } from 'react-chartjs-2';
 import {
     Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler
 } from 'chart.js';
+import {
+    STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
+    filterPill,
+    MetricCard, EmptyState,
+} from './theme';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler);
 
 interface DashboardProps { onVolver: () => void; }
-
-const STYLES = `
-@keyframes cc-fade-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.cc-fade-up { opacity: 0; animation: cc-fade-up .5s ease-out forwards; }
-
-@keyframes cc-gradient {
-  0%, 100% { background-position: 0% 50%; }
-  50%      { background-position: 100% 50%; }
-}
-.cc-gradient-text { background-size: 200% 200%; animation: cc-gradient 8s ease infinite; }
-
-@media (prefers-reduced-motion: reduce) {
-  .cc-gradient-text { animation: none; }
-  .cc-fade-up { opacity: 1; animation: none; }
-}
-`;
 
 const FILTROS = [
     { id: 'hoy', label: 'Hoy', icon: '📅' },
@@ -37,10 +22,20 @@ const FILTROS = [
     { id: 'todo', label: 'Todo', icon: '📊' },
 ] as const;
 
+// Secciones del dashboard para móvil (tabs)
+type SeccionDashboard = 'graficos' | 'metodos' | 'stock';
+
+const SECCIONES: { id: SeccionDashboard; label: string; icon: string }[] = [
+    { id: 'graficos', label: 'Ventas', icon: '📈' },
+    { id: 'metodos', label: 'Pagos', icon: '💳' },
+    { id: 'stock', label: 'Stock', icon: '📦' },
+];
+
 export default function Dashboard({ onVolver }: DashboardProps) {
     const [ventas, setVentas] = useState<Venta[]>([]);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [filtroFecha, setFiltroFecha] = useState<'hoy' | 'semana' | 'mes' | 'todo'>('semana');
+    const [seccionMovil, setSeccionMovil] = useState<SeccionDashboard>('graficos');
 
     useEffect(() => { cargarDatos(); }, [filtroFecha]);
 
@@ -148,8 +143,8 @@ export default function Dashboard({ onVolver }: DashboardProps) {
             },
         },
         scales: {
-            x: { grid: { color: 'rgba(148, 163, 184, 0.08)' }, ticks: { color: '#94a3b8', font: { size: 11 } } },
-            y: { grid: { color: 'rgba(148, 163, 184, 0.08)' }, ticks: { color: '#94a3b8', font: { size: 11 } } },
+            x: { grid: { color: 'rgba(148, 163, 184, 0.08)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+            y: { grid: { color: 'rgba(148, 163, 184, 0.08)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
         },
     };
 
@@ -162,45 +157,37 @@ export default function Dashboard({ onVolver }: DashboardProps) {
             legend: {
                 display: true,
                 position: 'bottom' as const,
-                labels: { color: '#cbd5e1', padding: 12, font: { size: 12, weight: 600 as const }, usePointStyle: true, pointStyle: 'circle' },
+                labels: { color: '#cbd5e1', padding: 10, font: { size: 11, weight: 600 as const }, usePointStyle: true, pointStyle: 'circle' },
             },
             tooltip: baseChartOptions.plugins.tooltip,
         },
     };
 
-    const kpis = [
+    // KPIs principales (siempre visibles)
+    const kpisPrincipales = [
         { label: 'Vendido', valor: `$${totalGeneral.toFixed(0)}`, sub: `${ventas.length} ventas`, icon: '💰', tile: 'from-emerald-500 to-teal-600' },
         { label: 'Ganancia', valor: `$${gananciaTotal.toFixed(0)}`, sub: 'Beneficio real', icon: '📈', tile: 'from-blue-500 to-indigo-600' },
         { label: 'Ticket', valor: `$${ticketPromedio.toFixed(0)}`, sub: 'Promedio', icon: '🎫', tile: 'from-violet-500 to-purple-600' },
         { label: 'Productos', valor: `${productos.length}`, sub: 'En inventario', icon: '📦', tile: 'from-cyan-500 to-blue-600' },
-        { label: 'Stock Bajo', valor: `${productosBajoStock.length}`, sub: 'Críticos', icon: '⚠️', tile: 'from-rose-500 to-red-600' },
     ];
 
-    const cardBase = 'rounded-2xl border border-white/10 bg-slate-900/95 shadow-lg shadow-black/30';
+    // KPI secundario (stock bajo) para móvil
 
     return (
-        <div className="relative min-h-screen overflow-hidden bg-slate-950 p-3 md:p-6">
+        <div className={pageWrap}>
             <style>{STYLES}</style>
-
-            {/* Fondo: blobs estáticos (sin animación, sin blur caro) */}
-            <div className="pointer-events-none fixed inset-0" aria-hidden="true">
-                <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-blue-600/15 blur-2xl" />
-                <div className="absolute -right-32 top-1/3 h-[26rem] w-[26rem] rounded-full bg-indigo-600/15 blur-2xl" />
-            </div>
+            <BackgroundBlobs />
 
             <div className="relative mx-auto max-w-7xl">
-
-                {/* Header */}
-                <div className={`cc-fade-up mb-4 md:mb-6 ${cardBase} p-4 md:p-6`}>
+                {/* ===== Header ===== */}
+                <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                             <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 via-indigo-600 to-violet-600 text-2xl shadow-md shadow-indigo-600/40 ring-2 ring-white/10 md:flex">
                                 📊
                             </div>
                             <div className="min-w-0">
-                                <h1 className="cc-gradient-text bg-gradient-to-r from-blue-400 via-indigo-400 to-violet-400 bg-clip-text text-xl font-black tracking-tight text-transparent md:text-3xl">
-                                    Panel de Control
-                                </h1>
+                                <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Panel de Control</h1>
                                 <p className="truncate text-xs text-gray-400 md:text-sm">Estadísticas en tiempo real</p>
                             </div>
                         </div>
@@ -213,115 +200,204 @@ export default function Dashboard({ onVolver }: DashboardProps) {
                     </div>
                 </div>
 
-                {/* Filtros */}
-                <div className={`cc-fade-up mb-4 md:mb-6 ${cardBase} p-3 md:p-4`}>
+                {/* ===== Filtros ===== */}
+                <div className={`cc-fade-up mb-4 md:mb-6 ${card} p-3 md:p-4`}>
                     <div className="flex flex-wrap gap-2">
-                        {FILTROS.map((f) => {
-                            const activo = filtroFecha === f.id;
-                            return (
-                                <button
-                                    key={f.id}
-                                    onClick={() => setFiltroFecha(f.id)}
-                                    className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-colors duration-150 md:px-4 md:text-base ${activo
-                                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/25'
-                                            : 'border border-white/10 bg-slate-800/50 text-gray-300 hover:border-blue-400/40 hover:bg-slate-800/80'
-                                        }`}
-                                >
-                                    <span>{f.icon}</span>
-                                    <span>{f.label}</span>
-                                </button>
-                            );
-                        })}
+                        {FILTROS.map((f) => (
+                            <button key={f.id} onClick={() => setFiltroFecha(f.id)} className={filterPill(filtroFecha === f.id)}>
+                                <span>{f.icon}</span>
+                                <span>{f.label}</span>
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                {/* KPIs */}
-                <div className="mb-4 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
-                    {kpis.map((k, i) => (
-                        <div
-                            key={k.label}
-                            className={`cc-fade-up rounded-2xl border border-white/10 bg-slate-900/95 p-3 shadow-lg shadow-black/30 transition-transform duration-150 hover:-translate-y-0.5 md:p-4 ${i === 4 ? 'col-span-2 md:col-span-1' : ''}`}
-                        >
-                            <span className={`mb-2 flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${k.tile} text-base shadow-md`}>
-                                {k.icon}
-                            </span>
-                            <p className="mb-0.5 text-[11px] font-extrabold uppercase tracking-wider text-gray-400">{k.label}</p>
-                            <p className="truncate text-xl font-black text-gray-100 md:text-2xl">{k.valor}</p>
-                            <p className="mt-0.5 text-[11px] font-medium text-gray-500">{k.sub}</p>
-                        </div>
+                {/* ===== KPIs: 2x2 en móvil, 4 en desktop ===== */}
+                <div className="mb-4 grid grid-cols-2 gap-3 md:mb-6 md:grid-cols-4 md:gap-4">
+                    {kpisPrincipales.map((k) => (
+                        <MetricCard key={k.label} icon={k.icon} label={k.label} value={k.valor} sub={k.sub} tile={k.tile} />
                     ))}
                 </div>
 
-                {/* Gráficos fila 1 */}
-                <div className="mb-4 grid grid-cols-1 gap-4 md:mb-6 lg:grid-cols-2">
-                    <div className={`cc-fade-up ${cardBase} p-4 md:p-5`}>
-                        <div className="mb-4 flex items-center gap-2">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-base shadow-md">📈</span>
-                            <h2 className="text-base font-bold text-gray-100 md:text-lg">Ventas por Día</h2>
-                        </div>
-                        <div className="h-56 md:h-64">
-                            <Line data={ventasPorDia()} options={baseChartOptions} />
-                        </div>
-                    </div>
-
-                    <div className={`cc-fade-up ${cardBase} p-4 md:p-5`}>
-                        <div className="mb-4 flex items-center gap-2">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-base shadow-md">🏆</span>
-                            <h2 className="text-base font-bold text-gray-100 md:text-lg">Top 5 Productos</h2>
-                        </div>
-                        <div className="h-56 md:h-64">
-                            <Bar data={topProductos()} options={baseChartOptions} />
+                {/* ===== Stock bajo en móvil (compacto) ===== */}
+                <div className="mb-4 md:hidden">
+                    <div className={`${card} p-3`}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-red-600 text-sm shadow-md">⚠️</span>
+                                <div>
+                                    <p className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Stock Bajo</p>
+                                    <p className="text-lg font-black text-gray-100">{productosBajoStock.length}</p>
+                                </div>
+                            </div>
+                            {productosBajoStock.length > 0 && (
+                                <span className="rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[10px] font-bold text-rose-300 ring-1 ring-rose-400/25">
+                                    {productosBajoStock.length} críticos
+                                </span>
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* Gráficos fila 2 */}
-                <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-2">
-                    <div className={`cc-fade-up ${cardBase} p-4 md:p-5`}>
-                        <div className="mb-4 flex items-center gap-2">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-base shadow-md">💳</span>
-                            <h2 className="text-base font-bold text-gray-100 md:text-lg">Métodos de Pago</h2>
-                        </div>
-                        <div className="flex h-56 items-center justify-center md:h-64">
-                            <Doughnut data={metodosPago()} options={doughnutOptions} />
+                {/* ===== MÓVIL: Tabs para secciones ===== */}
+                <div className="md:hidden">
+                    {/* Tabs */}
+                    <div className={`${card} mb-4 p-1.5`}>
+                        <div className="flex gap-1">
+                            {SECCIONES.map((s) => (
+                                <button
+                                    key={s.id}
+                                    onClick={() => setSeccionMovil(s.id)}
+                                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors duration-150 ${seccionMovil === s.id
+                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                                        : 'text-gray-400 hover:bg-white/5'
+                                        }`}
+                                >
+                                    <span>{s.icon}</span>
+                                    <span>{s.label}</span>
+                                </button>
+                            ))}
                         </div>
                     </div>
 
-                    <div className={`cc-fade-up ${cardBase} p-4 md:p-5`}>
-                        <div className="mb-4 flex items-center gap-2">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-base shadow-md">⚠️</span>
-                            <h2 className="text-base font-bold text-gray-100 md:text-lg">Stock Bajo</h2>
-                            {productosBajoStock.length > 0 && (
-                                <span className="ml-auto rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[11px] font-bold text-rose-300 ring-1 ring-rose-400/25">
-                                    {productosBajoStock.length}
-                                </span>
-                            )}
-                        </div>
-
-                        {productosBajoStock.length === 0 ? (
-                            <div className="flex h-56 flex-col items-center justify-center gap-2 text-center md:h-64">
-                                <span className="text-4xl">✅</span>
-                                <p className="text-sm font-semibold text-gray-400">Todos tienen stock suficiente</p>
-                            </div>
-                        ) : (
-                            <div className="max-h-56 space-y-2 overflow-y-auto pr-1 md:max-h-64">
-                                {productosBajoStock.map((p) => (
-                                    <div
-                                        key={p.id}
-                                        className="flex items-center justify-between rounded-xl border border-rose-400/20 bg-rose-500/10 p-2.5 transition-colors duration-150 hover:border-rose-400/40 hover:bg-rose-500/15 md:p-3"
-                                    >
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-bold text-gray-100">{p.nombre}</p>
-                                            <p className="text-[11px] text-gray-400">Mínimo: {p.stockMinimo}</p>
-                                        </div>
-                                        <div className="ml-3 text-right">
-                                            <p className="text-xl font-black text-rose-300 md:text-2xl">{p.stockActual}</p>
-                                            <p className="text-[10px] font-semibold uppercase text-gray-500">{p.unidadMedida || 'u'}</p>
-                                        </div>
+                    {/* Contenido según tab */}
+                    <div className={`cc-fade-up ${card} p-4`}>
+                        {seccionMovil === 'graficos' && (
+                            <div className="space-y-4">
+                                <div>
+                                    <div className="mb-3 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 text-sm shadow-md">📈</span>
+                                        <h2 className="text-sm font-bold text-gray-100">Ventas por Día</h2>
                                     </div>
-                                ))}
+                                    <div className="h-48">
+                                        <Line data={ventasPorDia()} options={baseChartOptions} />
+                                    </div>
+                                </div>
+                                <div className="border-t border-white/10 pt-4">
+                                    <div className="mb-3 flex items-center gap-2">
+                                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 text-sm shadow-md">🏆</span>
+                                        <h2 className="text-sm font-bold text-gray-100">Top 5 Productos</h2>
+                                    </div>
+                                    <div className="h-48">
+                                        <Bar data={topProductos()} options={baseChartOptions} />
+                                    </div>
+                                </div>
                             </div>
                         )}
+
+                        {seccionMovil === 'metodos' && (
+                            <div>
+                                <div className="mb-3 flex items-center gap-2">
+                                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-sm shadow-md">💳</span>
+                                    <h2 className="text-sm font-bold text-gray-100">Métodos de Pago</h2>
+                                </div>
+                                <div className="flex h-56 items-center justify-center">
+                                    <Doughnut data={metodosPago()} options={doughnutOptions} />
+                                </div>
+                            </div>
+                        )}
+
+                        {seccionMovil === 'stock' && (
+                            <div>
+                                <div className="mb-3 flex items-center gap-2">
+                                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-red-600 text-sm shadow-md">⚠️</span>
+                                    <h2 className="text-sm font-bold text-gray-100">Stock Bajo</h2>
+                                    {productosBajoStock.length > 0 && (
+                                        <span className="ml-auto rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[10px] font-bold text-rose-300 ring-1 ring-rose-400/25">
+                                            {productosBajoStock.length}
+                                        </span>
+                                    )}
+                                </div>
+                                {productosBajoStock.length === 0 ? (
+                                    <EmptyState icon="✅" texto="Todos tienen stock suficiente" />
+                                ) : (
+                                    <div className="space-y-2">
+                                        {productosBajoStock.map((p) => (
+                                            <div key={p.id} className="flex items-center justify-between rounded-xl border border-rose-400/20 bg-rose-500/10 p-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-bold text-gray-100">{p.nombre}</p>
+                                                    <p className="text-[11px] text-gray-400">Mínimo: {p.stockMinimo}</p>
+                                                </div>
+                                                <div className="ml-3 text-right">
+                                                    <p className="text-xl font-black text-rose-300">{p.stockActual}</p>
+                                                    <p className="text-[10px] font-semibold uppercase text-gray-500">{p.unidadMedida || 'u'}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* ===== DESKTOP: Todo visible (como antes) ===== */}
+                <div className="hidden md:block">
+                    <div className="mb-6 grid grid-cols-2 gap-4">
+                        <div className={`cc-fade-up ${card} p-5`}>
+                            <div className="mb-4 flex items-center gap-2">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-base shadow-md">📈</span>
+                                <h2 className="text-lg font-bold text-gray-100">Ventas por Día</h2>
+                            </div>
+                            <div className="h-64">
+                                <Line data={ventasPorDia()} options={baseChartOptions} />
+                            </div>
+                        </div>
+
+                        <div className={`cc-fade-up ${card} p-5`}>
+                            <div className="mb-4 flex items-center gap-2">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-base shadow-md">🏆</span>
+                                <h2 className="text-lg font-bold text-gray-100">Top 5 Productos</h2>
+                            </div>
+                            <div className="h-64">
+                                <Bar data={topProductos()} options={baseChartOptions} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-6">
+                        <div className={`cc-fade-up ${card} p-5`}>
+                            <div className="mb-4 flex items-center gap-2">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-base shadow-md">💳</span>
+                                <h2 className="text-lg font-bold text-gray-100">Métodos de Pago</h2>
+                            </div>
+                            <div className="flex h-64 items-center justify-center">
+                                <Doughnut data={metodosPago()} options={doughnutOptions} />
+                            </div>
+                        </div>
+
+                        <div className={`cc-fade-up ${card} p-5`}>
+                            <div className="mb-4 flex items-center gap-2">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-red-600 text-base shadow-md">⚠️</span>
+                                <h2 className="text-lg font-bold text-gray-100">Stock Bajo</h2>
+                                {productosBajoStock.length > 0 && (
+                                    <span className="ml-auto rounded-full bg-rose-500/15 px-2.5 py-0.5 text-[11px] font-bold text-rose-300 ring-1 ring-rose-400/25">
+                                        {productosBajoStock.length}
+                                    </span>
+                                )}
+                            </div>
+                            {productosBajoStock.length === 0 ? (
+                                <div className="flex h-64 flex-col items-center justify-center gap-2 text-center">
+                                    <span className="text-4xl">✅</span>
+                                    <p className="text-sm font-semibold text-gray-400">Todos tienen stock suficiente</p>
+                                </div>
+                            ) : (
+                                <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                                    {productosBajoStock.map((p) => (
+                                        <div key={p.id} className="flex items-center justify-between rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 transition-colors duration-150 hover:border-rose-400/40 hover:bg-rose-500/15">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-bold text-gray-100">{p.nombre}</p>
+                                                <p className="text-[11px] text-gray-400">Mínimo: {p.stockMinimo}</p>
+                                            </div>
+                                            <div className="ml-3 text-right">
+                                                <p className="text-2xl font-black text-rose-300">{p.stockActual}</p>
+                                                <p className="text-[10px] font-semibold uppercase text-gray-500">{p.unidadMedida || 'u'}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
