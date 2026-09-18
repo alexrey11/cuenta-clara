@@ -31,6 +31,7 @@ const MENU = [
     { id: 'licencias', icon: '🔑', label: 'Licencias', roles: ['admin'], soloMaster: true },
     { id: 'seguridad', icon: '🔐', label: 'Seguridad', roles: ['admin', 'jefe'] },
     { id: 'configuracion', icon: '⚙️', label: 'Configuración', roles: ['admin', 'jefe'] },
+    { id: 'ayuda', icon: '📚', label: 'Guía de Uso', roles: ['admin', 'jefe', 'vendedor'] },
 ] as const;
 
 const ROL_INFO: Record<string, { icon: string; nombre: string; tile: string }> = {

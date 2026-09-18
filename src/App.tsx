@@ -22,6 +22,7 @@ import MovimientosInventario from './MovimientosInventario';
 import Configuracion from './Configuracion';
 import HistorialVentas from './HistorialVentas';
 import LogsSeguridad from './LogsSeguridad';
+import Ayuda from './Ayuda';
 import {
   esPrimeraInstalacion,
   obtenerFechaInstalacion,
@@ -175,7 +176,7 @@ function App() {
           return <ProductosCategoria categoriaId={categoriaSeleccionada} onVolver={() => setCategoriaSeleccionada(null)} usuarioActual={usuarioActual} />;
         }
         return <Categorias onSeleccionarCategoria={(id) => setCategoriaSeleccionada(id)} usuarioActual={usuarioActual} />;
-        return <Dashboard onVolver={() => setVistaActual('venta')} />;
+
       case 'cierre':
         return <CierreCaja onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
       case 'usuarios':
@@ -200,8 +201,10 @@ function App() {
         return <LogsSeguridad usuarioActual={usuarioActual} />;
       case 'historial':
         return <HistorialVentas usuarioActual={usuarioActual} />;
+      case 'ayuda':
+        return <Ayuda usuarioActual={usuarioActual} onIrAVista={cambiarVista} />;
       default:
-        return <Dashboard onVolver={() => setVistaActual('venta')} />;
+        return <Dashboard onVolver={() => setVistaActual('venta')} onIrAVista={cambiarVista} />;
     }
   };
 

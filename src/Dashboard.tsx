@@ -13,7 +13,10 @@ import {
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler);
 
-interface DashboardProps { onVolver: () => void; }
+interface DashboardProps {
+    onVolver: () => void;
+    onIrAVista: (vista: string) => void;
+}
 
 const FILTROS = [
     { id: 'hoy', label: 'Hoy', icon: '📅' },
@@ -22,7 +25,6 @@ const FILTROS = [
     { id: 'todo', label: 'Todo', icon: '📊' },
 ] as const;
 
-// Secciones del dashboard para móvil (tabs)
 type SeccionDashboard = 'graficos' | 'metodos' | 'stock';
 
 const SECCIONES: { id: SeccionDashboard; label: string; icon: string }[] = [
@@ -31,13 +33,30 @@ const SECCIONES: { id: SeccionDashboard; label: string; icon: string }[] = [
     { id: 'stock', label: 'Stock', icon: '📦' },
 ];
 
-export default function Dashboard({ onVolver }: DashboardProps) {
+export default function Dashboard({ onVolver, onIrAVista }: DashboardProps) {
     const [ventas, setVentas] = useState<Venta[]>([]);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [filtroFecha, setFiltroFecha] = useState<'hoy' | 'semana' | 'mes' | 'todo'>('semana');
     const [seccionMovil, setSeccionMovil] = useState<SeccionDashboard>('graficos');
+    const [mostrarBienvenida, setMostrarBienvenida] = useState(false);
 
     useEffect(() => { cargarDatos(); }, [filtroFecha]);
+
+    // Banner de bienvenida (solo la primera vez)
+    useEffect(() => {
+        const yaVio = localStorage.getItem('cc.bienvenida.vista');
+        if (!yaVio) setMostrarBienvenida(true);
+    }, []);
+
+    const cerrarBienvenida = () => {
+        localStorage.setItem('cc.bienvenida.vista', 'true');
+        setMostrarBienvenida(false);
+    };
+
+    const irAGuia = () => {
+        cerrarBienvenida();
+        onIrAVista('ayuda');
+    };
 
     const cargarDatos = async () => {
         const todasVentas = await db.ventas.toArray();
@@ -65,13 +84,18 @@ export default function Dashboard({ onVolver }: DashboardProps) {
     const productosBajoStock = productos.filter(p => p.stockActual <= p.stockMinimo);
 
     const gananciaTotal = ventas.reduce((sum, v) => {
-        const items = v.items && v.items.length > 0 ? v.items : [{ precioUnitario: v.precioUnitario || v.total, precioCompra: 0, cantidad: v.cantidad || 1, subtotal: v.total }];
+        const items = v.items && v.items.length > 0
+            ? v.items
+            : [{ precioUnitario: v.precioUnitario || v.total, precioCompra: 0, cantidad: v.cantidad || 1, subtotal: v.total }];
         return sum + items.reduce((s, item) => s + ((item.precioUnitario - (item.precioCompra || 0)) * item.cantidad), 0);
     }, 0);
 
     const ventasPorDia = () => {
         const dias: Record<string, number> = {};
-        ventas.forEach(v => { const fecha = new Date(v.fecha).toLocaleDateString('es-ES'); dias[fecha] = (dias[fecha] || 0) + v.total; });
+        ventas.forEach(v => {
+            const fecha = new Date(v.fecha).toLocaleDateString('es-ES');
+            dias[fecha] = (dias[fecha] || 0) + v.total;
+        });
         return {
             labels: Object.keys(dias),
             datasets: [{
@@ -94,8 +118,12 @@ export default function Dashboard({ onVolver }: DashboardProps) {
     const topProductos = () => {
         const stats = new Map<string, number>();
         ventas.forEach(v => {
-            const items = v.items && v.items.length > 0 ? v.items : [{ productoNombre: v.productoNombre || 'N/A', cantidad: v.cantidad || 1 }];
-            items.forEach(item => { stats.set(item.productoNombre, (stats.get(item.productoNombre) || 0) + item.cantidad); });
+            const items = v.items && v.items.length > 0
+                ? v.items
+                : [{ productoNombre: v.productoNombre || 'N/A', cantidad: v.cantidad || 1 }];
+            items.forEach(item => {
+                stats.set(item.productoNombre, (stats.get(item.productoNombre) || 0) + item.cantidad);
+            });
         });
         const sorted = Array.from(stats.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
         return {
@@ -112,7 +140,11 @@ export default function Dashboard({ onVolver }: DashboardProps) {
 
     const metodosPago = () => {
         const metodos: Record<string, number> = { efectivo: 0, transferencia: 0, tarjeta: 0, fiado: 0 };
-        ventas.forEach(v => { v.metodosPago?.forEach(mp => { metodos[mp.tipo] = (metodos[mp.tipo] || 0) + mp.montoEnCUP; }); });
+        ventas.forEach(v => {
+            v.metodosPago?.forEach(mp => {
+                metodos[mp.tipo] = (metodos[mp.tipo] || 0) + mp.montoEnCUP;
+            });
+        });
         return {
             labels: ['Efectivo', 'Transfer', 'Tarjeta', 'Fiado'],
             datasets: [{
@@ -163,7 +195,6 @@ export default function Dashboard({ onVolver }: DashboardProps) {
         },
     };
 
-    // KPIs principales (siempre visibles)
     const kpisPrincipales = [
         { label: 'Vendido', valor: `$${totalGeneral.toFixed(0)}`, sub: `${ventas.length} ventas`, icon: '💰', tile: 'from-emerald-500 to-teal-600' },
         { label: 'Ganancia', valor: `$${gananciaTotal.toFixed(0)}`, sub: 'Beneficio real', icon: '📈', tile: 'from-blue-500 to-indigo-600' },
@@ -171,14 +202,43 @@ export default function Dashboard({ onVolver }: DashboardProps) {
         { label: 'Productos', valor: `${productos.length}`, sub: 'En inventario', icon: '📦', tile: 'from-cyan-500 to-blue-600' },
     ];
 
-    // KPI secundario (stock bajo) para móvil
-
     return (
         <div className={pageWrap}>
             <style>{STYLES}</style>
             <BackgroundBlobs />
 
             <div className="relative mx-auto max-w-7xl">
+                {/* ===== Banner de Bienvenida ===== */}
+                {mostrarBienvenida && (
+                    <div className="cc-fade-up mb-4 overflow-hidden rounded-2xl border border-blue-400/25 bg-gradient-to-br from-blue-500/15 to-indigo-500/10 p-4 md:mb-6 md:p-5">
+                        <div className="flex items-start gap-3">
+                            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-xl shadow-md">
+                                👋
+                            </span>
+                            <div className="min-w-0 flex-1">
+                                <h3 className="mb-1 text-base font-bold text-gray-100 md:text-lg">¡Bienvenido a CuentaClara!</h3>
+                                <p className="mb-3 text-xs text-gray-300 md:text-sm">
+                                    ¿Es tu primera vez? Tenemos una guía con todo lo que necesitas para empezar a vender hoy mismo.
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        onClick={irAGuia}
+                                        className="rounded-lg border border-blue-400/30 bg-blue-500/20 px-3 py-2 text-xs font-bold text-blue-200 transition-colors hover:bg-blue-500/30 md:text-sm"
+                                    >
+                                        📚 Ver guía
+                                    </button>
+                                    <button
+                                        onClick={cerrarBienvenida}
+                                        className="rounded-lg border border-white/10 bg-slate-800/60 px-3 py-2 text-xs font-bold text-gray-300 transition-colors hover:bg-slate-800 md:text-sm"
+                                    >
+                                        Cerrar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* ===== Header ===== */}
                 <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
                     <div className="flex items-center justify-between gap-3">
@@ -239,9 +299,8 @@ export default function Dashboard({ onVolver }: DashboardProps) {
                     </div>
                 </div>
 
-                {/* ===== MÓVIL: Tabs para secciones ===== */}
+                {/* ===== MÓVIL: Tabs ===== */}
                 <div className="md:hidden">
-                    {/* Tabs */}
                     <div className={`${card} mb-4 p-1.5`}>
                         <div className="flex gap-1">
                             {SECCIONES.map((s) => (
@@ -249,8 +308,8 @@ export default function Dashboard({ onVolver }: DashboardProps) {
                                     key={s.id}
                                     onClick={() => setSeccionMovil(s.id)}
                                     className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-xs font-bold transition-colors duration-150 ${seccionMovil === s.id
-                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
-                                        : 'text-gray-400 hover:bg-white/5'
+                                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md'
+                                            : 'text-gray-400 hover:bg-white/5'
                                         }`}
                                 >
                                     <span>{s.icon}</span>
@@ -260,7 +319,6 @@ export default function Dashboard({ onVolver }: DashboardProps) {
                         </div>
                     </div>
 
-                    {/* Contenido según tab */}
                     <div className={`cc-fade-up ${card} p-4`}>
                         {seccionMovil === 'graficos' && (
                             <div className="space-y-4">
@@ -331,7 +389,7 @@ export default function Dashboard({ onVolver }: DashboardProps) {
                     </div>
                 </div>
 
-                {/* ===== DESKTOP: Todo visible (como antes) ===== */}
+                {/* ===== DESKTOP ===== */}
                 <div className="hidden md:block">
                     <div className="mb-6 grid grid-cols-2 gap-4">
                         <div className={`cc-fade-up ${card} p-5`}>
