@@ -1,7 +1,7 @@
-// ============ src/CierreCaja.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Venta, CierreCaja as CierreCajaType, Usuario } from './db';
+import { usePDV } from './contexts/PuntoDeVentaContext';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     btnPrimary, btnSecondary, input, label, sectionTitle,
@@ -15,21 +15,33 @@ interface CierreCajaProps {
 }
 
 export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps) {
+    const { pdvActivo, modoTodos } = usePDV();
     const [cierres, setCierres] = useState<CierreCajaType[]>([]);
     const [modalAbierto, setModalAbierto] = useState(false);
     const [montoReal, setMontoReal] = useState('');
     const [notas, setNotas] = useState('');
     const [ventasHoy, setVentasHoy] = useState<Venta[]>([]);
 
-    useEffect(() => { cargarDatos(); }, []);
+    useEffect(() => { cargarDatos(); }, [pdvActivo?.id, modoTodos]);
 
     const cargarDatos = async () => {
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
         const todasVentas = await db.ventas.toArray();
-        const deHoy = todasVentas.filter(v => new Date(v.fecha) >= hoy && v.estado === 'completada');
-        setVentasHoy(deHoy);
-        const c = await db.cierres.toArray();
-        setCierres(c.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
+
+        let ventasDelPDV = todasVentas.filter(v => new Date(v.fecha) >= hoy && v.estado === 'completada');
+        if (pdvActivo) {
+            ventasDelPDV = ventasDelPDV.filter(v => v.puntoDeVentaId === pdvActivo.id);
+        } else {
+            ventasDelPDV = [];
+        }
+        setVentasHoy(ventasDelPDV);
+
+        let listaCierres = await db.cierres.toArray();
+        if (pdvActivo) {
+            listaCierres = listaCierres.filter(c => c.puntoDeVentaId === pdvActivo.id);
+        }
+        listaCierres.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+        setCierres(listaCierres);
     };
 
     const totalVentas = ventasHoy.reduce((s, v) => s + v.total, 0);
@@ -39,6 +51,7 @@ export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps)
     }, 0);
 
     const guardarCierre = async () => {
+        if (!pdvActivo) { alert('No hay punto de venta activo'); return; }
         if (!montoReal) { alert('Ingresa monto real'); return; }
         const mr = parseFloat(montoReal);
         const diferencia = mr - totalEfectivo;
@@ -47,8 +60,12 @@ export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps)
         ventasHoy.forEach(v => { ventasPorVendedor[v.vendedorNombre] = (ventasPorVendedor[v.vendedorNombre] || 0) + v.total; });
 
         await db.cierres.add({
-            fecha: new Date(), totalVentas, cantidadVentas: ventasHoy.length,
-            montoReal: mr, diferencia, notas: notas.trim() || 'Sin notas',
+            fecha: new Date(),
+            totalVentas,
+            cantidadVentas: ventasHoy.length,
+            montoReal: mr,
+            diferencia,
+            notas: notas.trim() || 'Sin notas',
             realizadoPor: usuarioActual.nombre,
             ventasPorVendedor: Object.entries(ventasPorVendedor).map(([vendedor, total]) => ({ vendedor, total })),
             desgloseMetodosPago: {
@@ -57,12 +74,38 @@ export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps)
                 tarjeta: ventasHoy.reduce((s, v) => s + (v.metodosPago?.filter(m => m.tipo === 'tarjeta').reduce((a, m) => a + m.montoEnCUP, 0) || 0), 0),
                 fiado: ventasHoy.reduce((s, v) => s + (v.metodosPago?.filter(m => m.tipo === 'fiado').reduce((a, m) => a + m.montoEnCUP, 0) || 0), 0),
             },
+            puntoDeVentaId: pdvActivo.id!,
+            puntoDeVentaNombre: pdvActivo.nombre,
         });
 
         alert(`✅ Cierre guardado\nDiferencia: $${diferencia.toFixed(2)}`);
-        setModalAbierto(false); setMontoReal(''); setNotas('');
+        setModalAbierto(false);
+        setMontoReal('');
+        setNotas('');
         cargarDatos();
     };
+
+    if (!pdvActivo) {
+        return (
+            <div className={pageWrap}>
+                <style>{STYLES}</style>
+                <BackgroundBlobs />
+                <div className="relative mx-auto flex min-h-[60vh] max-w-md items-center">
+                    <div className={`${cardPadded} w-full text-center`}>
+                        <div className="mb-4 flex justify-center">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-600 text-4xl shadow-lg ring-4 ring-white/10">🏪</div>
+                        </div>
+                        <h1 className="mb-2 text-xl font-black text-gray-100">
+                            {modoTodos ? 'Selecciona un punto de venta' : 'Sin punto de venta'}
+                        </h1>
+                        <p className="text-sm text-gray-400">
+                            {modoTodos ? 'El cierre de caja se hace por punto de venta específico.' : 'No tienes un punto de venta asignado.'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className={pageWrap}>
@@ -76,7 +119,7 @@ export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps)
                             <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">💰</div>
                             <div className="min-w-0">
                                 <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Cierre de Caja</h1>
-                                <p className="truncate text-xs text-gray-400 md:text-sm">Control diario de ventas</p>
+                                <p className="truncate text-xs text-gray-400 md:text-sm">{pdvActivo.icono} {pdvActivo.nombre.replace(/^[^\s]+\s/, '')}</p>
                             </div>
                         </div>
                         <button onClick={onVolver} className={btnSecondary}>← Volver</button>
@@ -124,8 +167,7 @@ export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps)
                                                 <p className="font-semibold text-gray-200">${c.montoReal.toFixed(2)}</p>
                                             </div>
                                         </div>
-                                        <div className={`mt-2 rounded-lg p-2 text-xs font-semibold md:text-sm ${ok ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'
-                                            }`}>
+                                        <div className={`mt-2 rounded-lg p-2 text-xs font-semibold md:text-sm ${ok ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'}`}>
                                             Diferencia: <strong>${c.diferencia.toFixed(2)}</strong>
                                         </div>
                                     </div>
@@ -144,6 +186,7 @@ export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps)
                             </div>
                             <div className="space-y-4 p-4 md:p-6">
                                 <div className="rounded-xl border border-blue-400/20 bg-blue-500/10 p-3 md:p-4">
+                                    <p className="text-xs text-blue-300">{pdvActivo.nombre}</p>
                                     <p className="text-sm text-blue-300">Total ventas del día:</p>
                                     <p className="text-2xl font-black text-blue-200 md:text-3xl">${totalVentas.toFixed(2)}</p>
                                     <p className="mt-1 text-xs text-blue-300/80">{ventasHoy.length} ventas realizadas</p>
@@ -152,13 +195,9 @@ export default function CierreCaja({ onVolver, usuarioActual }: CierreCajaProps)
                                     <label className={label}>💵 Efectivo en caja</label>
                                     <input type="number" step="0.01" value={montoReal} onChange={(e) => setMontoReal(e.target.value)}
                                         className={`${input} text-lg font-bold`} placeholder="0.00" />
-                                    <p className="mt-1 text-xs text-gray-500">Cuenta el dinero en efectivo</p>
                                 </div>
                                 {montoReal && (
-                                    <div className={`rounded-xl p-3 text-sm font-semibold ${parseFloat(montoReal) === totalEfectivo
-                                        ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25'
-                                        : 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'
-                                        }`}>
+                                    <div className={`rounded-xl p-3 text-sm font-semibold ${parseFloat(montoReal) === totalEfectivo ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' : 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'}`}>
                                         <strong>Diferencia:</strong> ${(parseFloat(montoReal) - totalEfectivo).toFixed(2)}
                                     </div>
                                 )}

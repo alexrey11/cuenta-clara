@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { db } from './db';
 import { comprimirImagen } from './utils/imageUtils';
 import { registrarLog } from './utils/logger';
+import { usePDV } from './contexts/PuntoDeVentaContext';
 import type { Producto, Categoria, Usuario } from './db';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
@@ -16,6 +17,7 @@ interface ProductosCategoriaProps {
 }
 
 export default function ProductosCategoria({ categoriaId, onVolver, usuarioActual }: ProductosCategoriaProps) {
+    const { pdvActivo } = usePDV();
     const [categoria, setCategoria] = useState<Categoria | null>(null);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -62,11 +64,17 @@ export default function ProductosCategoria({ categoriaId, onVolver, usuarioActua
             alert('Completa nombre, precio compra, precio venta y stock');
             return;
         }
+        if (!pdvActivo && !productoEditando) {
+            alert('No hay punto de venta activo');
+            return;
+        }
+
         const pc = parseFloat(precioCompra);
         const pv = parseFloat(precioVenta);
         if (pc >= pv && !confirm('⚠️ Precio compra >= precio venta. ¿Continuar?')) return;
 
         const datos = {
+            puntoDeVentaId: productoEditando ? productoEditando.puntoDeVentaId : pdvActivo!.id!,
             categoriaId,
             nombre: nombre.trim(),
             descripcion: descripcion.trim() || undefined,
@@ -86,14 +94,14 @@ export default function ProductosCategoria({ categoriaId, onVolver, usuarioActua
             await registrarLog('producto_editado', `Producto "${datos.nombre}" editado`, {
                 usuarioId: usuarioActual.id,
                 usuarioNombre: usuarioActual.nombre,
-                detalles: `ID: ${productoEditando.id} | Stock: ${productoEditando.stockActual} → ${datos.stockActual}`,
+                detalles: `ID: ${productoEditando.id} · Stock: ${productoEditando.stockActual} → ${datos.stockActual}`,
             });
         } else {
             const id = await db.productos.add(datos);
             await registrarLog('producto_creado', `Producto "${datos.nombre}" creado`, {
                 usuarioId: usuarioActual.id,
                 usuarioNombre: usuarioActual.nombre,
-                detalles: `ID: ${id} | Precio venta: $${datos.precioVenta} | Stock: ${datos.stockActual}`,
+                detalles: `ID: ${id} · Precio: $${datos.precioVenta} · Stock: ${datos.stockActual}`,
             });
         }
 
@@ -121,19 +129,18 @@ export default function ProductosCategoria({ categoriaId, onVolver, usuarioActua
         const prod = productos.find(p => p.id === eliminando);
         if (!prod) return;
 
-        // Si tiene ventas asociadas, avisar
         const ventasAsociadas = await db.ventas
             .filter(v => v.items?.some(i => i.productoId === eliminando) || v.productoId === eliminando)
             .count();
         if (ventasAsociadas > 0) {
-            if (!confirm(`Este producto tiene ${ventasAsociadas} venta(s) registrada(s). ¿Eliminar de todas formas?\n\n(El historial de ventas se conserva.)`)) return;
+            if (!confirm(`Este producto tiene ${ventasAsociadas} venta(s) registrada(s). ¿Eliminar de todas formas?`)) return;
         }
 
         await db.productos.delete(eliminando);
         await registrarLog('producto_eliminado', `Producto "${prod.nombre}" eliminado`, {
             usuarioId: usuarioActual.id,
             usuarioNombre: usuarioActual.nombre,
-            detalles: `ID: ${eliminando} | Precio venta: $${prod.precioVenta} | Stock al eliminar: ${prod.stockActual}`,
+            detalles: `ID: ${eliminando} · Precio: $${prod.precioVenta} · Stock: ${prod.stockActual}`,
         });
 
         setEliminando(null);
@@ -178,22 +185,16 @@ export default function ProductosCategoria({ categoriaId, onVolver, usuarioActua
                             const bajo = prod.stockActual <= prod.stockMinimo;
                             return (
                                 <div key={prod.id} className={`${card} cc-fade-up flex flex-col overflow-hidden`}>
-                                    {/* Imagen */}
                                     <div className="relative h-40 overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900">
                                         {prod.imagen
                                             ? <img src={prod.imagen} alt={prod.nombre} className="h-full w-full object-cover" />
                                             : <div className="flex h-full w-full items-center justify-center"><span className="text-6xl opacity-30">📦</span></div>}
-
-                                        {/* Badge de stock siempre visible */}
                                         <div className={`absolute top-2 left-2 rounded-full px-2.5 py-1 text-xs font-black text-white shadow-lg ${bajo ? 'bg-rose-500' : 'bg-emerald-500'}`}>
                                             {prod.stockActual} {prod.unidadMedida}
                                         </div>
                                     </div>
-
-                                    {/* Info */}
                                     <div className="flex flex-1 flex-col p-4">
                                         <h3 className="mb-2 truncate text-base font-bold text-gray-100">{prod.nombre}</h3>
-
                                         <div className="mb-3 space-y-1">
                                             <div className="flex justify-between text-xs">
                                                 <span className="text-gray-500">Compra:</span>
@@ -210,8 +211,6 @@ export default function ProductosCategoria({ categoriaId, onVolver, usuarioActua
                                                 </div>
                                             )}
                                         </div>
-
-                                        {/* Botones editar/eliminar SIEMPRE VISIBLES */}
                                         <div className="mt-auto flex gap-2">
                                             <button
                                                 onClick={() => editarProducto(prod)}
@@ -233,7 +232,6 @@ export default function ProductosCategoria({ categoriaId, onVolver, usuarioActua
                     </div>
                 )}
 
-                {/* ===== Modal Crear/Editar ===== */}
                 {modalAbierto && (
                     <div className={modalOverlay}>
                         <div className={`${modalPanel} md:max-w-2xl`}>
@@ -302,7 +300,6 @@ export default function ProductosCategoria({ categoriaId, onVolver, usuarioActua
                     </div>
                 )}
 
-                {/* ===== Modal Confirmar Eliminar ===== */}
                 {productoAEliminar && (
                     <div className={modalOverlay}>
                         <div className={modalPanel}>

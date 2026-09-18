@@ -3,46 +3,17 @@ import { db } from './db';
 import type { Usuario } from './db';
 import { obtenerInfoLicencia } from './utils/trialUtils';
 import { registrarLog } from './utils/logger';
+import {
+    STYLES, BackgroundBlobs,
+    input, label,
+    modalOverlay, modalPanel, modalTitle,
+} from './theme';
 
 interface LoginProps {
     onLogin: (usuario: Usuario) => void;
 }
 
 type Rol = 'admin' | 'jefe' | 'vendedor';
-
-const STYLES = `
-@keyframes cc-float {
-  0%, 100% { transform: translateY(0) rotate(-3deg); }
-  50%      { transform: translateY(-8px) rotate(3deg); }
-}
-.cc-float { animation: cc-float 5s ease-in-out infinite; }
-
-@keyframes cc-fade-up {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.cc-fade-up { opacity: 0; animation: cc-fade-up .5s ease-out forwards; }
-
-@keyframes cc-gradient {
-  0%, 100% { background-position: 0% 50%; }
-  50%      { background-position: 100% 50%; }
-}
-.cc-gradient-text { background-size: 200% 200%; animation: cc-gradient 8s ease infinite; }
-
-@keyframes cc-shake {
-  0%, 100% { transform: translateX(0); }
-  20%      { transform: translateX(-8px); }
-  40%      { transform: translateX(7px); }
-  60%      { transform: translateX(-4px); }
-  80%      { transform: translateX(2px); }
-}
-.cc-shake { animation: cc-shake .4s ease-out; }
-
-@media (prefers-reduced-motion: reduce) {
-  .cc-float, .cc-gradient-text, .cc-shake { animation: none; }
-  .cc-fade-up { opacity: 1; animation: none; }
-}
-`;
 
 const ROLES: Record<string, { icon: string; nombre: string; tile: string; pill: string }> = {
     admin: { icon: '👑', nombre: 'Administrador', tile: 'from-fuchsia-500 to-purple-600', pill: 'bg-fuchsia-500/15 text-fuchsia-300 ring-1 ring-fuchsia-400/25' },
@@ -75,8 +46,8 @@ function PinInput({ value, onChange }: { value: string; onChange: (v: string) =>
                         <div
                             key={i}
                             className={`flex h-14 w-12 items-center justify-center rounded-2xl border-2 text-2xl font-black transition-all duration-150 md:h-16 md:w-14 ${lleno
-                                    ? 'border-blue-400 bg-blue-500/20 text-blue-200'
-                                    : 'border-white/10 bg-slate-800/60 text-gray-600'
+                                ? 'border-blue-400 bg-blue-500/20 text-blue-200'
+                                : 'border-white/10 bg-slate-800/60 text-gray-600'
                                 }`}
                         >
                             {lleno ? '●' : ''}
@@ -97,16 +68,19 @@ export default function Login({ onLogin }: LoginProps) {
     const [mensaje, setMensaje] = useState<{ tipo: 'error' | 'ok'; texto: string } | null>(null);
     const [intentosFallidos, setIntentosFallidos] = useState(0);
 
-    // Info de licencia
     const [esMaster, setEsMaster] = useState(false);
     const [licenciaActiva, setLicenciaActiva] = useState(false);
     const [diasRestantes, setDiasRestantes] = useState(15);
 
-    // Wizard de onboarding (cuando no hay usuarios)
     const [wizardNombre, setWizardNombre] = useState('');
     const [wizardPin, setWizardPin] = useState('');
     const [wizardRol, setWizardRol] = useState<Rol>('jefe');
     const [creando, setCreando] = useState(false);
+
+    // Selector de PDV al loguearse
+    const [mostrarSelectorPDV, setMostrarSelectorPDV] = useState(false);
+    const [pdvDisponibles, setPdvDisponibles] = useState<any[]>([]);
+    const [usuarioPendiente, setUsuarioPendiente] = useState<Usuario | null>(null);
 
     const cardRef = useRef<HTMLDivElement>(null);
     const inicializado = useRef(false);
@@ -124,7 +98,6 @@ export default function Login({ onLogin }: LoginProps) {
             const lista = await db.usuarios.toArray();
             setUsuarios(lista);
 
-            // Si es master y no hay usuarios, pre-seleccionar admin
             if (info.esMaster) setWizardRol('admin');
             else setWizardRol('jefe');
 
@@ -151,6 +124,10 @@ export default function Login({ onLogin }: LoginProps) {
         setMensaje(null);
     };
 
+    const finalizarLogin = (usuario: Usuario) => {
+        onLogin(usuario);
+    };
+
     const iniciarSesion = async () => {
         if (!usuarioSeleccionado) {
             error('Selecciona un usuario para continuar');
@@ -171,12 +148,59 @@ export default function Login({ onLogin }: LoginProps) {
         }
 
         setIntentosFallidos(0);
+
+        const detallesLog = `Rol: ${usuarioSeleccionado.rol}`;
         await registrarLog('login_ok', `Inicio de sesión exitoso de "${usuarioSeleccionado.nombre}"`, {
             usuarioId: usuarioSeleccionado.id,
             usuarioNombre: usuarioSeleccionado.nombre,
-            detalles: `Rol: ${usuarioSeleccionado.rol}`,
+            detalles: detallesLog,
         });
-        onLogin(usuarioSeleccionado);
+
+        // Determinar PDVs del usuario
+        const esJefeOAdmin = usuarioSeleccionado.rol === 'admin' || usuarioSeleccionado.rol === 'jefe';
+
+        if (esJefeOAdmin) {
+            // Jefes entran directo (el PDV se maneja en el Sidebar)
+            finalizarLogin(usuarioSeleccionado);
+            return;
+        }
+
+        // Vendedores: verificar PDVs asignados
+        const ids = usuarioSeleccionado.puntosDeVentaIds || [];
+        if (ids.length === 0) {
+            // Sin PDVs asignados → entrar de todos modos (no podrá hacer mucho)
+            finalizarLogin(usuarioSeleccionado);
+            return;
+        }
+
+        const todos = await db.puntosDeVenta.toArray();
+        const disponibles = todos.filter(p => ids.includes(p.id!) && p.activo);
+
+        if (disponibles.length === 0) {
+            error('No tienes puntos de venta activos asignados. Contacta al jefe.');
+            return;
+        }
+
+        if (disponibles.length === 1) {
+            // Un solo PDV → entrar directo
+            localStorage.setItem('cc.pdv.activo', String(disponibles[0].id));
+            localStorage.removeItem('cc.pdv.todos');
+            finalizarLogin(usuarioSeleccionado);
+            return;
+        }
+
+        // Varios PDVs → mostrar selector
+        setUsuarioPendiente(usuarioSeleccionado);
+        setPdvDisponibles(disponibles);
+        setMostrarSelectorPDV(true);
+    };
+
+    const elegirPDV = (pdv: any) => {
+        if (!usuarioPendiente) return;
+        localStorage.setItem('cc.pdv.activo', String(pdv.id));
+        localStorage.removeItem('cc.pdv.todos');
+        setMostrarSelectorPDV(false);
+        finalizarLogin(usuarioPendiente);
     };
 
     const crearUsuarioInicial = async () => {
@@ -186,23 +210,41 @@ export default function Login({ onLogin }: LoginProps) {
 
         setCreando(true);
         try {
+            // Crear PDV principal
+            const pdvId = await db.puntosDeVenta.add({
+                nombre: '🏪 Principal',
+                icono: '🏪',
+                activo: true,
+                creadoEn: new Date(),
+            });
+
             const datos = {
                 nombre,
                 pin: wizardPin,
                 rol: wizardRol,
                 creadoEn: new Date(),
+                puntosDeVentaIds: [pdvId],
             };
             const id = await db.usuarios.add(datos);
 
             await registrarLog('usuario_creado', `Usuario inicial "${nombre}" creado (${wizardRol})`, {
                 usuarioNombre: nombre,
-                detalles: 'Primer usuario de la instalación. Bienvenida.',
+                detalles: 'Primer usuario de la instalación',
             });
+
+            await registrarLog('pdv_creado', `PDV "Principal" creado automáticamente`, {
+                usuarioNombre: nombre,
+                detalles: `ID: ${pdvId}`,
+            });
+
+            // Establecer el PDV por defecto en localStorage
+            localStorage.setItem('cc.pdv.activo', String(pdvId));
 
             const nuevo: Usuario = { id, ...datos };
             setCreando(false);
-            onLogin(nuevo);
+            finalizarLogin(nuevo);
         } catch (e) {
+            console.error(e);
             setCreando(false);
             error('No se pudo crear el usuario. Intenta de nuevo.');
         }
@@ -213,7 +255,7 @@ export default function Login({ onLogin }: LoginProps) {
         if (licenciaActiva) return { icon: '✅', label: 'Licencia activa', class: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' };
         if (diasRestantes > 7) return { icon: '⏳', label: `Prueba: ${diasRestantes} días restantes`, class: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25' };
         if (diasRestantes > 2) return { icon: '⏳', label: `Prueba: ${diasRestantes} días restantes`, class: 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-400/25' };
-        return { icon: '⚠️', label: `Prueba: ${diasRestantes} día${diasRestantes !== 1 ? 's' : ''} restante${diasRestantes !== 1 ? 's' : ''}`, class: 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25' };
+        return { icon: '⚠️', label: `Prueba: ${diasRestantes} día${diasRestantes !== 1 ? 's' : ''}`, class: 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25' };
     })();
 
     const esOnboarding = !cargando && usuarios.length === 0;
@@ -221,18 +263,13 @@ export default function Login({ onLogin }: LoginProps) {
     return (
         <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-slate-950 p-4 md:p-6">
             <style>{STYLES}</style>
-
-            <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-                <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-blue-600/20 blur-2xl" />
-                <div className="absolute -right-32 top-1/3 h-[26rem] w-[26rem] rounded-full bg-indigo-600/20 blur-2xl" />
-            </div>
+            <BackgroundBlobs />
 
             <div className="relative w-full max-w-md">
                 <div
                     ref={cardRef}
                     className="max-h-[95vh] overflow-y-auto rounded-3xl border border-white/10 bg-slate-900/95 p-6 shadow-2xl shadow-black/60 ring-1 ring-inset ring-white/5 md:p-8"
                 >
-                    {/* Badge de licencia */}
                     <div className="cc-fade-up mb-4 flex justify-center">
                         <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-wider md:text-[11px] ${estadoLic.class}`}>
                             <span className="text-sm">{estadoLic.icon}</span>
@@ -240,7 +277,6 @@ export default function Login({ onLogin }: LoginProps) {
                         </span>
                     </div>
 
-                    {/* Cabecera */}
                     <div className="cc-fade-up mb-6 flex flex-col items-center text-center">
                         <div className="cc-float mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-to-br from-blue-500 via-indigo-600 to-violet-600 text-3xl shadow-xl shadow-indigo-600/50 ring-2 ring-white/10">
                             📊
@@ -261,30 +297,27 @@ export default function Login({ onLogin }: LoginProps) {
                             <p className="text-sm text-gray-400">Cargando…</p>
                         </div>
                     ) : esOnboarding ? (
-                        /* ============ WIZARD DE ONBOARDING ============ */
                         <>
-                            <div className="cc-fade-up mb-5 rounded-2xl border border-blue-400/25 bg-blue-500/10 p-3" style={{ animationDelay: '0.05s' }}>
+                            <div className="cc-fade-up mb-5 rounded-2xl border border-blue-400/25 bg-blue-500/10 p-3">
                                 <p className="text-xs font-bold text-blue-200 md:text-sm">👋 ¡Bienvenido!</p>
                                 <p className="mt-1 text-[11px] text-blue-200/80 md:text-xs">
                                     Este es tu primer acceso. Crea tu usuario principal para empezar a usar CuentaClara.
                                 </p>
                             </div>
 
-                            <div className="cc-fade-up mb-4" style={{ animationDelay: '0.1s' }}>
-                                <label className="mb-1.5 block text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
-                                    Tu nombre o el de tu negocio
-                                </label>
+                            <div className="cc-fade-up mb-4">
+                                <label className={label}>Tu nombre o el de tu negocio</label>
                                 <input
                                     type="text"
                                     value={wizardNombre}
                                     onChange={(e) => { setWizardNombre(e.target.value); setMensaje(null); }}
                                     placeholder="Ej: Bodega La Esquina, Juan Pérez…"
                                     autoFocus
-                                    className="w-full rounded-2xl border border-white/10 bg-slate-800/60 px-4 py-3 text-base font-semibold text-gray-100 outline-none transition-colors duration-150 placeholder:font-normal placeholder:text-gray-500 focus:border-blue-400/60 focus:bg-slate-800"
+                                    className={input}
                                 />
                             </div>
 
-                            <div className="cc-fade-up mb-4" style={{ animationDelay: '0.15s' }}>
+                            <div className="cc-fade-up mb-4">
                                 <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
                                     Elige tu PIN (4 dígitos)
                                 </label>
@@ -294,9 +327,8 @@ export default function Login({ onLogin }: LoginProps) {
                                 </p>
                             </div>
 
-                            {/* Selector de rol — solo visible si es master */}
                             {esMaster && (
-                                <div className="cc-fade-up mb-5" style={{ animationDelay: '0.2s' }}>
+                                <div className="cc-fade-up mb-5">
                                     <label className="mb-2 block text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
                                         Rol de la cuenta
                                     </label>
@@ -310,8 +342,8 @@ export default function Login({ onLogin }: LoginProps) {
                                                     type="button"
                                                     onClick={() => setWizardRol(r)}
                                                     className={`flex items-center gap-2 rounded-2xl border p-3 transition-colors duration-150 ${activo
-                                                            ? 'border-blue-400/60 bg-blue-500/15'
-                                                            : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40'
+                                                        ? 'border-blue-400/60 bg-blue-500/15'
+                                                        : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40'
                                                         }`}
                                                 >
                                                     <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${info.tile} text-base`}>
@@ -324,16 +356,14 @@ export default function Login({ onLogin }: LoginProps) {
                                             );
                                         })}
                                     </div>
-                                    <p className="mt-2 text-[11px] text-gray-500">
-                                        👑 Como master, puedes elegir admin.
-                                    </p>
+                                    <p className="mt-2 text-[11px] text-gray-500">👑 Como master, puedes elegir admin.</p>
                                 </div>
                             )}
 
                             {mensaje && (
                                 <div className={`cc-fade-up mb-4 flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold ${mensaje.tipo === 'error'
-                                        ? 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'
-                                        : 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25'
+                                    ? 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'
+                                    : 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25'
                                     }`}>
                                     <span>{mensaje.tipo === 'error' ? '⚠️' : '✅'}</span>
                                     <span>{mensaje.texto}</span>
@@ -351,7 +381,6 @@ export default function Login({ onLogin }: LoginProps) {
                             </button>
                         </>
                     ) : (
-                        /* ============ LOGIN NORMAL ============ */
                         <>
                             <div className="mb-5">
                                 <label className="mb-2.5 block text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
@@ -366,8 +395,8 @@ export default function Login({ onLogin }: LoginProps) {
                                                 key={u.id}
                                                 onClick={() => seleccionarUsuario(u)}
                                                 className={`flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-colors duration-150 ${activo
-                                                        ? 'border-blue-400/60 bg-blue-500/15'
-                                                        : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40 hover:bg-slate-800/80'
+                                                    ? 'border-blue-400/60 bg-blue-500/15'
+                                                    : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40 hover:bg-slate-800/80'
                                                     }`}
                                             >
                                                 <span className="flex min-w-0 items-center gap-3">
@@ -402,8 +431,8 @@ export default function Login({ onLogin }: LoginProps) {
 
                             {mensaje && (
                                 <div className={`mb-4 flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-bold ${mensaje.tipo === 'error'
-                                        ? 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'
-                                        : 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25'
+                                    ? 'bg-rose-500/15 text-rose-300 ring-1 ring-rose-400/25'
+                                    : 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25'
                                     }`}>
                                     <span>{mensaje.tipo === 'error' ? '⚠️' : '✅'}</span>
                                     <span>{mensaje.texto}</span>
@@ -423,9 +452,6 @@ export default function Login({ onLogin }: LoginProps) {
                                 <p className="text-[11px] font-semibold text-gray-400 md:text-xs">
                                     🔐 Los usuarios se gestionan desde el panel de <strong className="text-gray-200">Usuarios</strong>.
                                 </p>
-                                <p className="mt-1.5 text-[10px] text-gray-500">
-                                    ¿Olvidaste tu PIN? Contacta al administrador del negocio.
-                                </p>
                             </div>
                         </>
                     )}
@@ -435,6 +461,41 @@ export default function Login({ onLogin }: LoginProps) {
                     </p>
                 </div>
             </div>
+
+            {/* Modal selector de PDV (vendedores con varios PDVs) */}
+            {mostrarSelectorPDV && usuarioPendiente && (
+                <div className={modalOverlay}>
+                    <div className={modalPanel}>
+                        <div className="flex items-center justify-between bg-gradient-to-r from-indigo-600 to-violet-700 px-4 py-3 md:px-6 md:py-4">
+                            <div>
+                                <h2 className={modalTitle}>¿Dónde vas a trabajar?</h2>
+                                <p className="text-xs text-white/70">Selecciona tu punto de venta</p>
+                            </div>
+                        </div>
+                        <div className="space-y-2 p-4 md:p-6">
+                            {pdvDisponibles.map(pdv => (
+                                <button
+                                    key={pdv.id}
+                                    onClick={() => elegirPDV(pdv)}
+                                    className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-slate-800/50 p-3 text-left transition-colors hover:border-indigo-400/40 hover:bg-slate-800/80"
+                                >
+                                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-xl shadow-md">
+                                        {pdv.icono || '🏪'}
+                                    </span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm font-bold text-gray-100">
+                                            {pdv.nombre.replace(/^[^\s]+\s/, '')}
+                                        </span>
+                                        {pdv.direccion && (
+                                            <span className="block truncate text-xs text-gray-400">📍 {pdv.direccion}</span>
+                                        )}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

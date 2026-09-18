@@ -3,6 +3,7 @@ import { db } from './db';
 import type { Producto, Venta, Usuario, Cliente, TasaCambio, MetodoPago, ItemCarrito } from './db';
 import { onScanBluetooth, iniciarEscuchaBluetooth } from './utils/scanner';
 import EscanerCamara from './components/EscanerCamara';
+import { usePDV } from './contexts/PuntoDeVentaContext';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     input, label, sectionTitle, btnSecondary,
@@ -12,13 +13,12 @@ import {
 interface Props { onVolver: () => void; usuarioActual: Usuario; onCerrarSesion: () => void; }
 
 export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: Props) {
+    const { pdvActivo, modoTodos } = usePDV();
     const [productos, setProductos] = useState<Producto[]>([]);
     const [categorias, setCategorias] = useState<any[]>([]);
     const [clientes, setClientes] = useState<Cliente[]>([]);
     const [tasas, setTasas] = useState<TasaCambio[]>([]);
     const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
-    const [, setVentasHoy] = useState<Venta[]>([]);
-    const [, setTotalDia] = useState(0);
     const [filtroCategoria, setFiltroCategoria] = useState<number | 'todas'>('todas');
     const [busqueda, setBusqueda] = useState('');
     const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
@@ -31,14 +31,11 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     const [ultimoEscaneo, setUltimoEscaneo] = useState<string | null>(null);
     const [mostrarEscaner, setMostrarEscaner] = useState(false);
 
-    useEffect(() => { cargarTodo(); }, []);
+    useEffect(() => { cargarTodo(); }, [pdvActivo?.id]);
 
-    // Escucha global de escáner Bluetooth (HID como teclado)
     useEffect(() => {
         const cleanup = iniciarEscuchaBluetooth();
-        const unsub = onScanBluetooth((codigo) => {
-            procesarCodigoEscaneado(codigo);
-        });
+        const unsub = onScanBluetooth((codigo) => procesarCodigoEscaneado(codigo));
         return () => {
             if (typeof cleanup === 'function') cleanup();
             unsub();
@@ -46,19 +43,17 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     }, [productos, carrito]);
 
     const cargarTodo = async () => {
-        const [prods, cats, clis, tasasData] = await Promise.all([
-            db.productos.toArray(), db.categorias.toArray(), db.clientes.toArray(), db.tasasCambio.toArray(),
+        const [cats, clis, tasasData] = await Promise.all([
+            db.categorias.toArray(), db.clientes.toArray(), db.tasasCambio.toArray(),
         ]);
-        setProductos(prods.filter(p => p.stockActual > 0));
-        setCategorias(cats); setClientes(clis); setTasas(tasasData); cargarVentasHoy();
-    };
+        setCategorias(cats); setClientes(clis); setTasas(tasasData);
 
-    const cargarVentasHoy = async () => {
-        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
-        const todas = await db.ventas.toArray();
-        const deHoy = todas.filter(v => new Date(v.fecha) >= hoy);
-        setVentasHoy(deHoy);
-        setTotalDia(deHoy.filter(v => v.estado === 'completada').reduce((sum, v) => sum + v.total, 0));
+        if (pdvActivo) {
+            const prods = await db.productos.where('puntoDeVentaId').equals(pdvActivo.id!).toArray();
+            setProductos(prods.filter(p => p.stockActual > 0));
+        } else {
+            setProductos([]);
+        }
     };
 
     const obtenerTasa = (moneda: string): number => moneda === 'CUP' ? 1 : (tasas.find(t => t.moneda === moneda)?.tasa || 1);
@@ -67,10 +62,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     const agregarAlCarrito = (producto: Producto) => {
         const existente = carrito.find(item => item.productoId === producto.id);
         if (existente) {
-            if (existente.cantidad >= producto.stockActual) {
-                alert(`Solo quedan ${producto.stockActual}`);
-                return;
-            }
+            if (existente.cantidad >= producto.stockActual) { alert(`Solo quedan ${producto.stockActual}`); return; }
             setCarrito(carrito.map(item => item.productoId === producto.id
                 ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precioUnitario }
                 : item));
@@ -91,52 +83,33 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     const cambiarCantidad = (productoId: number, nuevaCantidad: number) => {
         const producto = productos.find(p => p.id === productoId);
         if (!producto) return;
-        if (nuevaCantidad > producto.stockActual) {
-            alert(`Solo quedan ${producto.stockActual}`);
-            return;
-        }
-        if (nuevaCantidad <= 0) {
-            setCarrito(carrito.filter(item => item.productoId !== productoId));
-        } else {
-            setCarrito(carrito.map(item => item.productoId === productoId
-                ? { ...item, cantidad: nuevaCantidad, subtotal: nuevaCantidad * item.precioUnitario }
-                : item));
-        }
+        if (nuevaCantidad > producto.stockActual) { alert(`Solo quedan ${producto.stockActual}`); return; }
+        if (nuevaCantidad <= 0) setCarrito(carrito.filter(item => item.productoId !== productoId));
+        else setCarrito(carrito.map(item => item.productoId === productoId
+            ? { ...item, cantidad: nuevaCantidad, subtotal: nuevaCantidad * item.precioUnitario }
+            : item));
     };
 
-    const eliminarDelCarrito = (productoId: number) => {
-        setCarrito(carrito.filter(item => item.productoId !== productoId));
-    };
-
-    // ===== ESCÁNER =====
+    const eliminarDelCarrito = (productoId: number) => setCarrito(carrito.filter(item => item.productoId !== productoId));
 
     const procesarCodigoEscaneado = (codigo: string) => {
         const limpio = codigo.trim();
         if (!limpio) return;
-
         const producto = productos.find(p => p.codigoBarras === limpio);
-
         if (producto) {
             agregarAlCarrito(producto);
             setUltimoEscaneo(`✅ ${producto.nombre} agregado`);
-            if (navigator.vibrate) navigator.vibrate(50);
             setTimeout(() => setUltimoEscaneo(null), 2000);
         } else {
             setUltimoEscaneo(`❌ Código no registrado: ${limpio}`);
-            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
             setTimeout(() => setUltimoEscaneo(null), 3000);
         }
     };
 
-    // ===== PAGOS =====
-
     const totalPagadoCUP = metodosPago.reduce((sum, mp) => sum + mp.montoEnCUP, 0);
     const vuelto = totalPagadoCUP - totalCarrito;
     const agregarMetodoPago = () => setMetodosPago([...metodosPago, { tipo: 'efectivo', monto: 0, moneda: 'CUP', montoEnCUP: 0 }]);
-    const eliminarMetodoPago = (index: number) => {
-        if (metodosPago.length > 1) setMetodosPago(metodosPago.filter((_, i) => i !== index));
-    };
-
+    const eliminarMetodoPago = (index: number) => { if (metodosPago.length > 1) setMetodosPago(metodosPago.filter((_, i) => i !== index)); };
     const actualizarMetodoPago = (index: number, campo: keyof MetodoPago, valor: any) => {
         const nuevos = [...metodosPago];
         (nuevos[index] as any)[campo] = valor;
@@ -145,6 +118,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     };
 
     const registrarVenta = async () => {
+        if (!pdvActivo) { alert('No hay punto de venta activo. Selecciona uno.'); return; }
         if (carrito.length === 0) { alert('Carrito vacío'); return; }
         if (!esFiado && totalPagadoCUP < totalCarrito) {
             alert(`Faltan $${(totalCarrito - totalPagadoCUP).toFixed(2)}`);
@@ -152,6 +126,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
         }
         const vendedor = await db.usuarios.get(usuarioActual.id!);
         const comision = vendedor?.comisionPorcentaje ? totalCarrito * (vendedor.comisionPorcentaje / 100) : 0;
+
         await db.ventas.add({
             items: carrito,
             total: totalCarrito,
@@ -166,16 +141,21 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
             clienteId: clienteSeleccionado?.id,
             clienteNombre: clienteSeleccionado?.nombre,
             vueltoCUP: vuelto > 0 ? vuelto : 0,
+            puntoDeVentaId: pdvActivo.id!,
+            puntoDeVentaNombre: pdvActivo.nombre,
         });
+
         for (const item of carrito) {
             const prod = await db.productos.get(item.productoId);
             if (prod) await db.productos.update(prod.id!, { stockActual: prod.stockActual - item.cantidad });
         }
+
         if (esFiado && clienteSeleccionado) {
             await db.clientes.update(clienteSeleccionado.id!, {
                 saldoPendiente: clienteSeleccionado.saldoPendiente + totalCarrito,
             });
         }
+
         let msg = `✅ Venta: $${totalCarrito.toFixed(2)} CUP`;
         if (vuelto > 0) {
             msg += `\n💰 VUELTO: $${vuelto.toFixed(2)} CUP`;
@@ -183,6 +163,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
             if (mpUSD) msg += `\n💵 O $${(vuelto / obtenerTasa('USD')).toFixed(2)} USD`;
         }
         alert(msg);
+
         setCarrito([]);
         setMetodosPago([{ tipo: 'efectivo', monto: 0, moneda: 'CUP', montoEnCUP: 0 }]);
         setNotasVenta('');
@@ -195,11 +176,9 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     const cancelarVenta = async () => {
         if (!modalCancelacion.venta || !razonCancelacion.trim()) { alert('Escribe motivo'); return; }
         const v = modalCancelacion.venta;
-        if (usuarioActual.rol === 'admin') {
-            await db.ventas.delete(v.id!);
-        } else {
-            await db.ventas.update(v.id!, { estado: 'error', notaCancelacion: razonCancelacion.trim() });
-        }
+        if (usuarioActual.rol === 'admin') await db.ventas.delete(v.id!);
+        else await db.ventas.update(v.id!, { estado: 'error', notaCancelacion: razonCancelacion.trim() });
+
         const items = v.items && v.items.length > 0 ? v.items : [{ productoId: v.productoId || 0, cantidad: v.cantidad || 1 }];
         for (const item of items) {
             const prod = await db.productos.get(item.productoId);
@@ -220,66 +199,97 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
         return cat && busq;
     });
 
+    const categoriasFiltradas = pdvActivo
+        ? categorias.filter(c => c.puntoDeVentaId === pdvActivo.id)
+        : categorias;
+
+    if (!pdvActivo) {
+        return (
+            <div className={pageWrap}>
+                <style>{STYLES}</style>
+                <BackgroundBlobs />
+                <div className="relative mx-auto max-w-7xl">
+                    <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">🛒</div>
+                                <div className="min-w-0">
+                                    <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Nueva Venta</h1>
+                                    <p className="truncate text-xs text-gray-400 md:text-sm">Vendedor: <strong className="text-blue-300">{usuarioActual.nombre}</strong></p>
+                                </div>
+                            </div>
+                            <div className="flex shrink-0 gap-1.5 md:gap-2">
+                                <button onClick={onVolver} className={btnSecondary}>←</button>
+                                <button onClick={onCerrarSesion} className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2.5 text-sm font-bold text-rose-300 transition-colors hover:bg-rose-500/20 md:px-4 md:text-base">Salir</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div className={`${cardPadded} text-center`}>
+                        <div className="mb-4 flex justify-center">
+                            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-violet-600 text-4xl shadow-lg ring-4 ring-white/10">🏪</div>
+                        </div>
+                        <h2 className="mb-2 text-xl font-black text-gray-100">
+                            {modoTodos ? 'Selecciona un punto de venta' : 'Sin punto de venta'}
+                        </h2>
+                        <p className="text-sm text-gray-400">
+                            {modoTodos
+                                ? 'Para hacer una venta, primero elige un punto de venta específico en el selector del sidebar.'
+                                : 'No tienes un punto de venta asignado. Contacta al jefe.'}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className={pageWrap}>
             <style>{STYLES}</style>
             <BackgroundBlobs />
 
             <div className="relative mx-auto max-w-7xl">
-                {/* Header */}
                 <div className={`cc-fade-up mb-4 md:mb-6 ${cardPadded}`}>
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
                             <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">🛒</div>
                             <div className="min-w-0">
                                 <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Nueva Venta</h1>
-                                <p className="truncate text-xs text-gray-400 md:text-sm">Vendedor: <strong className="text-blue-300">{usuarioActual.nombre}</strong></p>
+                                <p className="truncate text-xs text-gray-400 md:text-sm">
+                                    {pdvActivo.icono} <strong className="text-indigo-300">{pdvActivo.nombre.replace(/^[^\s]+\s/, '')}</strong> · {usuarioActual.nombre}
+                                </p>
                             </div>
                         </div>
                         <div className="flex shrink-0 gap-1.5 md:gap-2">
                             <button onClick={onVolver} className={btnSecondary}>←</button>
-                            <button onClick={onCerrarSesion}
-                                className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2.5 text-sm font-bold text-rose-300 transition-colors hover:bg-rose-500/20 md:px-4 md:text-base">
-                                Salir
-                            </button>
+                            <button onClick={onCerrarSesion} className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2.5 text-sm font-bold text-rose-300 transition-colors hover:bg-rose-500/20 md:px-4 md:text-base">Salir</button>
                         </div>
                     </div>
                 </div>
 
-                {/* Aviso de último escaneo */}
                 {ultimoEscaneo && (
                     <div className={`cc-fade-up mb-3 rounded-xl border p-3 text-sm font-bold ${ultimoEscaneo.startsWith('✅')
                         ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
-                        : 'border-rose-400/25 bg-rose-500/10 text-rose-300'
-                        }`}>
+                        : 'border-rose-400/25 bg-rose-500/10 text-rose-300'}`}>
                         {ultimoEscaneo}
                     </div>
                 )}
 
-                {/* Barra flotante móvil (carrito) */}
                 {carrito.length > 0 && !mostrarPagoMovil && (
                     <div className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between border-t border-white/10 bg-gradient-to-r from-blue-600 to-indigo-600 p-3 text-white shadow-2xl lg:hidden">
                         <div>
                             <p className="text-xs opacity-80">{carrito.length} producto(s)</p>
                             <p className="text-xl font-black">${totalCarrito.toFixed(2)}</p>
                         </div>
-                        <button onClick={() => setMostrarPagoMovil(true)}
-                            className="rounded-xl bg-white px-5 py-2 text-sm font-black text-blue-700 transition-transform hover:-translate-y-0.5">
-                            Cobrar →
-                        </button>
+                        <button onClick={() => setMostrarPagoMovil(true)} className="rounded-xl bg-white px-5 py-2 text-sm font-black text-blue-700 transition-transform hover:-translate-y-0.5">Cobrar →</button>
                     </div>
                 )}
 
                 <div className="grid grid-cols-1 gap-4 pb-20 lg:grid-cols-3 lg:gap-6 lg:pb-0">
-                    {/* Productos */}
                     <div className="space-y-4 lg:col-span-2 lg:space-y-6">
-                        {/* Búsqueda + Escáner */}
                         <div className={`${card} cc-fade-up p-3 md:p-4`}>
                             <div className="mb-3 flex gap-2">
-                                <button
-                                    onClick={() => setMostrarEscaner(true)}
-                                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-black text-white shadow-md shadow-emerald-500/25 transition-transform hover:-translate-y-0.5 active:translate-y-0 md:text-base"
-                                >
+                                <button onClick={() => setMostrarEscaner(true)}
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-black text-white shadow-md shadow-emerald-500/25 transition-transform hover:-translate-y-0.5 active:translate-y-0 md:text-base">
                                     📷 Escanear código
                                 </button>
                             </div>
@@ -295,16 +305,15 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                                     onChange={(e) => setFiltroCategoria(e.target.value === 'todas' ? 'todas' : parseInt(e.target.value))}
                                     className={`${input} md:w-56`}>
                                     <option value="todas">Todas las categorías</option>
-                                    {categorias.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
+                                    {categoriasFiltradas.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
                                 </select>
                             </div>
                         </div>
 
-                        {/* Lista de productos */}
                         <div className={`${card} cc-fade-up p-3 md:p-5`}>
                             <h2 className={`${sectionTitle} mb-3 md:mb-4`}>Productos ({productosFiltrados.length})</h2>
                             {productosFiltrados.length === 0 ? (
-                                <EmptyState icon="📦" texto="No hay productos que coincidan" />
+                                <EmptyState icon="📦" texto="No hay productos en este punto de venta" />
                             ) : (
                                 <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
                                     {productosFiltrados.map((p) => (
@@ -323,9 +332,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                         </div>
                     </div>
 
-                    {/* Carrito + Pago */}
                     <div className={`${mostrarPagoMovil ? 'block' : 'hidden lg:block'} space-y-4 lg:space-y-6`}>
-                        {/* Carrito */}
                         <div className={`${card} p-4 md:p-5`}>
                             <div className="mb-3 flex items-center justify-between md:mb-4">
                                 <h2 className={sectionTitle}>🛒 Carrito ({carrito.length})</h2>
@@ -361,7 +368,6 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                             </div>
                         </div>
 
-                        {/* Pago */}
                         <div className={`${card} p-4 md:p-5`}>
                             <h2 className={`${sectionTitle} mb-3 md:mb-4`}>💰 Pago</h2>
 
@@ -424,10 +430,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                                         ))}
                                     </div>
 
-                                    <div className={`mt-3 rounded-xl border p-3 ${totalPagadoCUP >= totalCarrito
-                                        ? 'border-emerald-400/25 bg-emerald-500/10'
-                                        : 'border-rose-400/25 bg-rose-500/10'
-                                        }`}>
+                                    <div className={`mt-3 rounded-xl border p-3 ${totalPagadoCUP >= totalCarrito ? 'border-emerald-400/25 bg-emerald-500/10' : 'border-rose-400/25 bg-rose-500/10'}`}>
                                         <div className="flex justify-between text-sm">
                                             <span className="text-gray-300">Pagado:</span>
                                             <span className="font-semibold text-gray-100">${totalPagadoCUP.toFixed(2)}</span>
@@ -457,7 +460,6 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                 </div>
             </div>
 
-            {/* Modal Cancelación */}
             {modalCancelacion.abierto && modalCancelacion.venta && (
                 <div className={modalOverlay}>
                     <div className={modalPanel}>
@@ -491,13 +493,9 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                 </div>
             )}
 
-            {/* Modal Escáner de Cámara */}
             {mostrarEscaner && (
                 <EscanerCamara
-                    onDetectado={(codigo) => {
-                        setMostrarEscaner(false);
-                        procesarCodigoEscaneado(codigo);
-                    }}
+                    onDetectado={(codigo) => { setMostrarEscaner(false); procesarCodigoEscaneado(codigo); }}
                     onCancelar={() => setMostrarEscaner(false)}
                 />
             )}

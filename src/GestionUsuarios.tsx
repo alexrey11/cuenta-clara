@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { db } from './db';
-import type { Usuario } from './db';
+import type { Usuario, PuntoDeVenta } from './db';
 import { registrarLog } from './utils/logger';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
@@ -26,41 +26,62 @@ const getRol = (r: string): (typeof ROL_INFO)[Rol] =>
 
 export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsuariosProps) {
     const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+    const [puntosDeVenta, setPuntosDeVenta] = useState<PuntoDeVenta[]>([]);
     const [modoCrear, setModoCrear] = useState(false);
     const [editando, setEditando] = useState<Usuario | null>(null);
     const [nombre, setNombre] = useState('');
     const [pin, setPin] = useState('');
     const [rol, setRol] = useState<Rol>('vendedor');
     const [comision, setComision] = useState('');
+    const [pdvsSeleccionados, setPdvsSeleccionados] = useState<number[]>([]);
 
     const esAdmin = usuarioActual.rol === 'admin';
+    const rolesPermitidos: Rol[] = esAdmin ? ['admin', 'jefe', 'vendedor'] : ['jefe', 'vendedor'];
 
-    // Roles que puede asignar el usuario actual
-    const rolesPermitidos: Rol[] = esAdmin
-        ? ['admin', 'jefe', 'vendedor']
-        : ['jefe', 'vendedor'];
-
-    useEffect(() => { cargarUsuarios(); }, []);
+    useEffect(() => {
+        cargarUsuarios();
+        cargarPDVs();
+    }, []);
 
     const cargarUsuarios = async () => {
         const todos = await db.usuarios.toArray();
         setUsuarios(todos);
     };
 
+    const cargarPDVs = async () => {
+        const lista = await db.puntosDeVenta.toArray();
+        lista.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        setPuntosDeVenta(lista);
+    };
+
+    const abrirCrear = () => {
+        setRol(esAdmin ? 'jefe' : 'vendedor');
+        setPdvsSeleccionados([]);
+        setModoCrear(true);
+    };
+
+    const togglePDV = (id: number) => {
+        setPdvsSeleccionados(prev =>
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+    };
+
     const guardar = async () => {
         if (!nombre.trim() || !pin) { alert('Completa todos los campos'); return; }
         if (pin.length !== 4) { alert('PIN debe tener 4 dígitos'); return; }
 
-        // Validar que puede asignar ese rol
         if (!rolesPermitidos.includes(rol)) {
             alert(`No puedes crear usuarios con rol "${getRol(rol).nombre}"`);
             return;
         }
 
-        // Si está editando, validar también que puede editar ese rol
         if (editando && !rolesPermitidos.includes(editando.rol as Rol)) {
             alert('No tienes permisos para editar a este usuario');
             return;
+        }
+
+        if (rol === 'vendedor' && pdvsSeleccionados.length === 0) {
+            if (!confirm('Este vendedor no tiene puntos de venta asignados. ¿Crear de todas formas?')) return;
         }
 
         const datos = {
@@ -69,6 +90,7 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
             rol,
             comisionPorcentaje: comision ? parseFloat(comision) : undefined,
             creadoEn: editando ? editando.creadoEn : new Date(),
+            puntosDeVentaIds: rol === 'vendedor' ? pdvsSeleccionados : [],
         };
 
         if (editando) {
@@ -76,7 +98,7 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
             await registrarLog('usuario_editado', `Usuario "${datos.nombre}" editado`, {
                 usuarioId: usuarioActual.id,
                 usuarioNombre: usuarioActual.nombre,
-                detalles: `Rol: ${datos.rol}, Comisión: ${datos.comisionPorcentaje || 0}%`,
+                detalles: `Rol: ${datos.rol}, PDVs: ${datos.puntosDeVentaIds.length}`,
             });
             alert('✅ Usuario actualizado');
         } else {
@@ -84,7 +106,7 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
             await registrarLog('usuario_creado', `Usuario "${datos.nombre}" creado`, {
                 usuarioId: usuarioActual.id,
                 usuarioNombre: usuarioActual.nombre,
-                detalles: `Rol: ${datos.rol}, Comisión: ${datos.comisionPorcentaje || 0}%`,
+                detalles: `Rol: ${datos.rol}, PDVs: ${datos.puntosDeVentaIds.length}`,
             });
             alert('✅ Usuario creado');
         }
@@ -99,6 +121,7 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
         setPin(u.pin);
         setRol(u.rol as Rol);
         setComision(u.comisionPorcentaje?.toString() || '');
+        setPdvsSeleccionados(u.puntosDeVentaIds || []);
         setModoCrear(true);
     };
 
@@ -110,26 +133,15 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
         const u = usuarios.find((x) => x.id === id);
         if (!u) return;
 
-        // No se puede eliminar un admin si no eres admin
         if (u.rol === 'admin' && !esAdmin) {
             alert('No puedes eliminar a un administrador');
             return;
         }
 
-        // No eliminar el último admin si eres admin
         if (u.rol === 'admin') {
             const admins = usuarios.filter((x) => x.rol === 'admin');
             if (admins.length <= 1) {
                 alert('No puedes eliminar al último administrador');
-                return;
-            }
-        }
-
-        // No eliminar el último jefe si no es admin
-        if (u.rol === 'jefe') {
-            const jefes = usuarios.filter((x) => x.rol === 'jefe');
-            if (jefes.length <= 1 && !esAdmin) {
-                alert('Debe quedar al menos un jefe en el sistema');
                 return;
             }
         }
@@ -150,13 +162,9 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
         setPin('');
         setRol('vendedor');
         setComision('');
+        setPdvsSeleccionados([]);
         setModoCrear(false);
         setEditando(null);
-    };
-
-    const abrirCrear = () => {
-        setRol(esAdmin ? 'jefe' : 'vendedor');
-        setModoCrear(true);
     };
 
     return (
@@ -207,15 +215,11 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
                                         const info = getRol(r);
                                         const activo = rol === r;
                                         return (
-                                            <button
-                                                key={r}
-                                                type="button"
-                                                onClick={() => setRol(r)}
+                                            <button key={r} type="button" onClick={() => setRol(r)}
                                                 className={`flex flex-col items-center gap-1.5 rounded-2xl border p-3 transition-colors duration-150 ${activo
                                                         ? 'border-blue-400/60 bg-blue-500/15'
                                                         : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40'
-                                                    }`}
-                                            >
+                                                    }`}>
                                                 <span className={`flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br ${info.tile} text-base`}>
                                                     {info.icon}
                                                 </span>
@@ -226,12 +230,53 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
                                         );
                                     })}
                                 </div>
-                                {!esAdmin && (
-                                    <p className="mt-2 text-[11px] text-gray-500">
-                                        🔐 Solo el administrador puede crear otros administradores.
-                                    </p>
-                                )}
                             </div>
+
+                            {rol === 'vendedor' && (
+                                <div>
+                                    <label className={label}>Puntos de venta asignados</label>
+                                    {puntosDeVenta.length === 0 ? (
+                                        <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs text-amber-200">
+                                            ⚠️ No hay puntos de venta creados. Ve a <strong>Puntos de Venta</strong> y crea al menos uno primero.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {puntosDeVenta.filter(p => p.activo).map(p => {
+                                                const activo = pdvsSeleccionados.includes(p.id!);
+                                                return (
+                                                    <button
+                                                        key={p.id}
+                                                        type="button"
+                                                        onClick={() => togglePDV(p.id!)}
+                                                        className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors ${activo
+                                                                ? 'border-blue-400/60 bg-blue-500/15'
+                                                                : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40'
+                                                            }`}>
+                                                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-lg shadow-md">
+                                                            {p.icono || '🏪'}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1">
+                                                            <span className="block truncate text-sm font-bold text-gray-100">
+                                                                {p.nombre.replace(/^[^\s]+\s/, '')}
+                                                            </span>
+                                                            {p.direccion && (
+                                                                <span className="block truncate text-xs text-gray-400">📍 {p.direccion}</span>
+                                                            )}
+                                                        </span>
+                                                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-black ${activo ? 'border-blue-400 bg-blue-500 text-white' : 'border-white/15 text-transparent'
+                                                            }`}>
+                                                            ✓
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                    <p className="mt-2 text-[11px] text-gray-500">
+                                        Puedes asignar 1, 2 o más puntos de venta. Este vendedor podrá elegir dónde trabajar al entrar.
+                                    </p>
+                                </div>
+                            )}
 
                             <div>
                                 <label className={label}>% Comisión (opcional, para vendedores)</label>
@@ -264,14 +309,17 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
                                 const esYo = u.id === usuarioActual.id;
                                 const puedeEliminar = !esYo && (u.rol !== 'admin' || esAdmin);
                                 const puedeEditar = rolesPermitidos.includes(u.rol as Rol);
+                                const pdvsDeUsuario = u.puntosDeVentaIds
+                                    ?.map(id => puntosDeVenta.find(p => p.id === id))
+                                    .filter(Boolean) || [];
 
                                 return (
-                                    <div key={u.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-slate-800/50 p-3 md:p-4">
-                                        <div className="flex min-w-0 flex-1 items-center gap-3">
+                                    <div key={u.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-white/10 bg-slate-800/50 p-3 md:p-4">
+                                        <div className="flex min-w-0 flex-1 items-start gap-3">
                                             <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${info.tile} text-xl ring-2 ring-white/10`}>
                                                 {info.icon}
                                             </span>
-                                            <div className="min-w-0">
+                                            <div className="min-w-0 flex-1">
                                                 <h3 className="flex items-center gap-2 truncate text-sm font-bold text-gray-100 md:text-base">
                                                     {u.nombre}
                                                     {esYo && (
@@ -280,14 +328,27 @@ export default function GestionUsuarios({ onVolver, usuarioActual }: GestionUsua
                                                         </span>
                                                     )}
                                                 </h3>
-                                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                                                     <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${info.pill}`}>
                                                         {info.nombre}
                                                     </span>
                                                     {u.comisionPorcentaje ? (
-                                                        <span className="text-[11px] text-emerald-300">Comisión: {u.comisionPorcentaje}%</span>
+                                                        <span className="text-[11px] text-emerald-300">💰 {u.comisionPorcentaje}%</span>
                                                     ) : null}
                                                 </div>
+                                                {u.rol === 'vendedor' && (
+                                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                                        {pdvsDeUsuario.length === 0 ? (
+                                                            <span className="text-[10px] italic text-gray-500">Sin PDV asignados</span>
+                                                        ) : (
+                                                            pdvsDeUsuario.map((p: any) => (
+                                                                <span key={p.id} className="inline-flex items-center gap-1 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-bold text-indigo-300 ring-1 ring-indigo-400/25">
+                                                                    {p.icono} {p.nombre.replace(/^[^\s]+\s/, '')}
+                                                                </span>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">

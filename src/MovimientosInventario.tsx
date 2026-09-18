@@ -1,7 +1,7 @@
-// ============ src/MovimientosInventario.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { MovimientoInventario, Producto, Usuario } from './db';
+import { usePDV } from './contexts/PuntoDeVentaContext';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     btnPrimary, input, label, filterPill,
@@ -25,6 +25,7 @@ const getTipo = (t: string) =>
     TIPO_INFO[t] ?? { icon: '📦', label: t, pill: 'bg-slate-500/15 text-slate-300 ring-1 ring-slate-400/25', tile: 'from-slate-400 to-slate-600', signo: '=' as const };
 
 export default function MovimientosInventario({ usuarioActual }: MovimientosProps) {
+    const { pdvActivo, modoTodos } = usePDV();
     const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
     const [productos, setProductos] = useState<Producto[]>([]);
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -35,21 +36,35 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
     const [filtroTipo, setFiltroTipo] = useState<'todos' | TipoMov>('todos');
     const [busqueda, setBusqueda] = useState('');
 
-    useEffect(() => { cargarDatos(); }, []);
+    useEffect(() => { cargarDatos(); }, [pdvActivo?.id, modoTodos]);
 
     const cargarDatos = async () => {
-        const [m, p] = await Promise.all([
-            db.movimientosInventario.toArray(),
-            db.productos.toArray(),
-        ]);
-        setMovimientos(m.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
-        setProductos(p);
+        let movs: MovimientoInventario[];
+        let prods: Producto[];
+
+        if (modoTodos) {
+            movs = await db.movimientosInventario.toArray();
+            prods = await db.productos.toArray();
+        } else if (pdvActivo) {
+            movs = await db.movimientosInventario.where('puntoDeVentaId').equals(pdvActivo.id!).toArray();
+            prods = await db.productos.where('puntoDeVentaId').equals(pdvActivo.id!).toArray();
+        } else {
+            movs = [];
+            prods = [];
+        }
+
+        movs.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+        setMovimientos(movs);
+        setProductos(prods);
     };
 
     const crearMovimiento = async () => {
+        if (!pdvActivo) { alert('Selecciona un punto de venta específico'); return; }
         if (!productoSel || !cantidad || !motivo.trim()) { alert('Completa todos los campos'); return; }
+
         const prod = await db.productos.get(productoSel);
         if (!prod) { alert('Producto no encontrado'); return; }
+
         const cant = parseInt(cantidad);
         if (cant <= 0) { alert('Cantidad inválida'); return; }
 
@@ -61,11 +76,16 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
         if (stockNuevo < 0) { alert('Stock no puede ser negativo'); return; }
 
         await db.movimientosInventario.add({
-            productoId: prod.id!, productoNombre: prod.nombre, tipo,
+            productoId: prod.id!,
+            productoNombre: prod.nombre,
+            tipo,
             cantidad: tipo === 'ajuste' ? Math.abs(stockNuevo - prod.stockActual) : cant,
-            motivo: motivo.trim(), fecha: new Date(),
+            motivo: motivo.trim(),
+            fecha: new Date(),
             realizadoPor: usuarioActual.nombre,
-            stockAnterior: prod.stockActual, stockNuevo,
+            stockAnterior: prod.stockActual,
+            stockNuevo,
+            puntoDeVentaId: pdvActivo.id!,
         });
 
         await db.productos.update(prod.id!, { stockActual: stockNuevo });
@@ -74,7 +94,6 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
         cargarDatos();
     };
 
-    // Stats del día
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const deHoy = movimientos.filter(m => new Date(m.fecha) >= hoy);
     const entradasHoy = deHoy.filter(m => m.tipo === 'entrada' || m.tipo === 'devolucion').reduce((s, m) => s + m.cantidad, 0);
@@ -83,10 +102,7 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
     const filtrados = movimientos.filter(m => {
         const okTipo = filtroTipo === 'todos' || m.tipo === filtroTipo;
         const b = busqueda.toLowerCase();
-        const okBusqueda = !busqueda ||
-            m.productoNombre.toLowerCase().includes(b) ||
-            m.motivo.toLowerCase().includes(b) ||
-            m.realizadoPor.toLowerCase().includes(b);
+        const okBusqueda = !busqueda || m.productoNombre.toLowerCase().includes(b) || m.motivo.toLowerCase().includes(b) || m.realizadoPor.toLowerCase().includes(b);
         return okTipo && okBusqueda;
     });
 
@@ -110,21 +126,22 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
                             <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">📦</div>
                             <div className="min-w-0">
                                 <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Movimientos</h1>
-                                <p className="truncate text-xs text-gray-400 md:text-sm">Historial de cambios en stock</p>
+                                <p className="truncate text-xs text-gray-400 md:text-sm">
+                                    {pdvActivo && `${pdvActivo.icono} ${pdvActivo.nombre.replace(/^[^\s]+\s/, '')}`}
+                                    {modoTodos && 'Todos los PDV'}
+                                </p>
                             </div>
                         </div>
-                        <button onClick={() => setModalAbierto(true)} className={btnPrimary}>+ Nuevo</button>
+                        {!modoTodos && <button onClick={() => setModalAbierto(true)} className={btnPrimary}>+ Nuevo</button>}
                     </div>
                 </div>
 
-                {/* Stats del día */}
                 <div className="mb-4 grid grid-cols-3 gap-3 md:mb-6 md:gap-4">
                     <MetricCard icon="📋" label="Hoy" value={`${deHoy.length}`} sub="Movimientos" tile="from-slate-500 to-slate-700" />
                     <MetricCard icon="📥" label="Entradas" value={`+${entradasHoy}`} sub="Unidades hoy" tile="from-emerald-500 to-teal-600" />
                     <MetricCard icon="📤" label="Salidas" value={`-${salidasHoy}`} sub="Unidades hoy" tile="from-rose-500 to-red-600" />
                 </div>
 
-                {/* Filtros */}
                 <div className={`${card} cc-fade-up mb-4 p-3 md:mb-6 md:p-4`}>
                     <div className="mb-3 flex flex-wrap gap-2">
                         {filtros.map((f) => (
@@ -134,11 +151,10 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
                             </button>
                         ))}
                     </div>
-                    <input type="text" placeholder="🔍 Buscar producto, motivo o responsable..."
-                        value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className={input} />
+                    <input type="text" placeholder="🔍 Buscar producto, motivo o responsable..." value={busqueda}
+                        onChange={(e) => setBusqueda(e.target.value)} className={input} />
                 </div>
 
-                {/* Lista */}
                 {filtrados.length === 0 ? (
                     <div className={`${card} p-6`}>
                         <EmptyState icon="📦" texto={busqueda || filtroTipo !== 'todos' ? 'Sin movimientos que coincidan' : 'No hay movimientos registrados'} />
@@ -193,6 +209,9 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
                                 <button onClick={() => setModalAbierto(false)} className={modalClose}>&times;</button>
                             </div>
                             <div className="space-y-4 p-4 md:p-6">
+                                <div className="rounded-xl border border-blue-400/20 bg-blue-500/10 p-3 text-xs text-blue-200">
+                                    Punto de venta: <strong>{pdvActivo?.nombre}</strong>
+                                </div>
                                 <div>
                                     <label className={label}>Producto *</label>
                                     <select value={productoSel} onChange={(e) => setProductoSel(parseInt(e.target.value))} className={input}>
@@ -211,10 +230,7 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
                                             const activo = tipo === t;
                                             return (
                                                 <button key={t} type="button" onClick={() => setTipo(t)}
-                                                    className={`flex items-center gap-2 rounded-xl border p-2.5 text-left transition-all duration-150 ${activo
-                                                        ? 'border-blue-400/60 bg-gradient-to-br from-blue-500/15 to-indigo-500/10'
-                                                        : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40'
-                                                        }`}>
+                                                    className={`flex items-center gap-2 rounded-xl border p-2.5 text-left transition-all duration-150 ${activo ? 'border-blue-400/60 bg-gradient-to-br from-blue-500/15 to-indigo-500/10' : 'border-white/10 bg-slate-800/50 hover:border-blue-400/40'}`}>
                                                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${info.tile} text-sm`}>
                                                         {info.icon}
                                                     </span>
@@ -233,7 +249,6 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
                                         onChange={(e) => setCantidad(e.target.value)}
                                         className={`${input} text-lg font-bold`}
                                         placeholder={tipo === 'ajuste' ? 'Stock final' : 'Cantidad'} />
-                                    {tipo === 'ajuste' && <p className="mt-1 text-xs text-gray-500">Establece el stock final del producto</p>}
                                 </div>
 
                                 <div>
@@ -244,12 +259,10 @@ export default function MovimientosInventario({ usuarioActual }: MovimientosProp
                                 </div>
 
                                 <div className="flex gap-3 pt-2">
-                                    <button onClick={() => setModalAbierto(false)}
-                                        className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">
+                                    <button onClick={() => setModalAbierto(false)} className="flex-1 rounded-xl border border-white/10 bg-slate-800/60 py-3 text-base font-bold text-gray-300 transition-colors hover:bg-slate-800">
                                         Cancelar
                                     </button>
-                                    <button onClick={crearMovimiento}
-                                        className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-base font-bold text-white shadow-md shadow-blue-500/25 transition-transform hover:-translate-y-0.5">
+                                    <button onClick={crearMovimiento} className="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 py-3 text-base font-bold text-white shadow-md shadow-blue-500/25 transition-transform hover:-translate-y-0.5">
                                         Registrar
                                     </button>
                                 </div>

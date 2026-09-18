@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 
 import type { Usuario } from './db';
 import { ThemeProvider } from './ThemeContext';
+import { PuntoDeVentaProvider } from './contexts/PuntoDeVentaContext';
 import Login from './Login';
 import WelcomeScreen from './WelcomeScreen';
 import Sidebar from './Sidebar';
@@ -23,6 +24,7 @@ import Configuracion from './Configuracion';
 import HistorialVentas from './HistorialVentas';
 import LogsSeguridad from './LogsSeguridad';
 import Ayuda from './Ayuda';
+import PuntosDeVenta from './PuntosDeVenta';
 import {
   esPrimeraInstalacion,
   obtenerFechaInstalacion,
@@ -38,23 +40,17 @@ function App() {
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState<number | null>(null);
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
 
-  // Info de licencia para el Sidebar
   const [esMaster, setEsMaster] = useState(false);
   const [licenciaActiva, setLicenciaActiva] = useState(false);
   const [diasRestantes, setDiasRestantes] = useState(15);
 
-  // ===== Arranque =====
   useEffect(() => {
     (async () => {
-      // ⚠️ IMPORTANTE: primero verificamos primera instalación.
-      // Esta llamada NO crea el trial (solo lee).
       const esPrimera = await esPrimeraInstalacion();
       if (esPrimera) {
         setEstado('bienvenida');
         return;
       }
-
-      // Ya hay trial o licencia → obtenemos info
       const info = await obtenerInfoLicencia();
       setEsMaster(info.esMaster);
       setLicenciaActiva(info.activa);
@@ -72,20 +68,16 @@ function App() {
     setDiasRestantes(info.diasRestantes);
   };
 
-  // ===== Handlers de la pantalla de bienvenida =====
   const comenzarPrueba = async () => {
-    await obtenerFechaInstalacion(); // aquí SÍ se crea el trial
+    await obtenerFechaInstalacion();
     await refrescarInfoLicencia();
     setEstado('login');
   };
 
   const irAActivar = () => {
-    // No creamos trial todavía. Si el usuario cancela, puede volver a "bienvenida"
-    // (aunque como no hay botón atrás, simplemente se queda en la pantalla de activación)
     setEstado('activar');
   };
 
-  // ===== Login =====
   const handleLogin = (usuario: Usuario) => {
     setUsuarioActual(usuario);
     setVistaActual(usuario.rol === 'vendedor' ? 'venta' : 'dashboard');
@@ -108,7 +100,6 @@ function App() {
     setSidebarAbierto(false);
   };
 
-  // ===== Render por estado =====
   if (estado === 'cargando') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950">
@@ -176,7 +167,8 @@ function App() {
           return <ProductosCategoria categoriaId={categoriaSeleccionada} onVolver={() => setCategoriaSeleccionada(null)} usuarioActual={usuarioActual} />;
         }
         return <Categorias onSeleccionarCategoria={(id) => setCategoriaSeleccionada(id)} usuarioActual={usuarioActual} />;
-
+      case 'dashboard':
+        return <Dashboard onVolver={() => setVistaActual('venta')} onIrAVista={cambiarVista} />;
       case 'cierre':
         return <CierreCaja onVolver={() => setVistaActual('dashboard')} usuarioActual={usuarioActual} />;
       case 'usuarios':
@@ -203,6 +195,8 @@ function App() {
         return <HistorialVentas usuarioActual={usuarioActual} />;
       case 'ayuda':
         return <Ayuda usuarioActual={usuarioActual} onIrAVista={cambiarVista} />;
+      case 'puntos-venta':
+        return <PuntosDeVenta usuarioActual={usuarioActual} />;
       default:
         return <Dashboard onVolver={() => setVistaActual('venta')} onIrAVista={cambiarVista} />;
     }
@@ -210,48 +204,71 @@ function App() {
 
   return (
     <ThemeProvider>
-      <div className="relative min-h-screen bg-slate-950">
-        {sidebarAbierto && (
-          <button
-            aria-label="Cerrar menú"
-            onClick={toggleSidebar}
-            className="fixed inset-0 z-20 bg-slate-950/70 md:hidden"
-          />
-        )}
-
-        <button
-          onClick={toggleSidebar}
-          className="group fixed left-3 top-3 z-30 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-gray-100 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] ring-1 ring-inset ring-white/5 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-400/60 hover:bg-blue-500/15 hover:text-blue-300 active:scale-95 md:hidden"
-          aria-label={sidebarAbierto ? 'Cerrar menú' : 'Abrir menú'}
-        >
-          {sidebarAbierto ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          )}
-        </button>
-
-        <Sidebar
+      <PuntoDeVentaProvider usuarioActual={usuarioActual}>
+        <AppShellInner
           usuarioActual={usuarioActual}
           vistaActual={vistaActual}
-          onCambiarVista={cambiarVista}
-          onCerrarSesion={cerrarSesion}
-          abierto={sidebarAbierto}
-          onToggle={toggleSidebar}
+          sidebarAbierto={sidebarAbierto}
           esMaster={esMaster}
           licenciaActiva={licenciaActiva}
           diasRestantes={diasRestantes}
+          onToggleSidebar={toggleSidebar}
+          onCambiarVista={cambiarVista}
+          onCerrarSesion={cerrarSesion}
+          renderVista={renderVista}
         />
-
-        <div className="md:ml-64">
-          {renderVista()}
-        </div>
-      </div>
+      </PuntoDeVentaProvider>
     </ThemeProvider>
+  );
+}
+
+/** Componente interno que consume el contexto PDV (necesario porque el Provider debe estar arriba) */
+function AppShellInner({
+  usuarioActual, vistaActual, sidebarAbierto, esMaster, licenciaActiva, diasRestantes,
+  onToggleSidebar, onCambiarVista, onCerrarSesion, renderVista,
+}: any) {
+  return (
+    <div className="relative min-h-screen bg-slate-950">
+      {sidebarAbierto && (
+        <button
+          aria-label="Cerrar menú"
+          onClick={onToggleSidebar}
+          className="fixed inset-0 z-20 bg-slate-950/70 md:hidden"
+        />
+      )}
+
+      <button
+        onClick={onToggleSidebar}
+        className="group fixed left-3 top-3 z-30 flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-slate-900/70 text-gray-100 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.8)] ring-1 ring-inset ring-white/5 transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-400/60 hover:bg-blue-500/15 hover:text-blue-300 active:scale-95 md:hidden"
+        aria-label={sidebarAbierto ? 'Cerrar menú' : 'Abrir menú'}
+      >
+        {sidebarAbierto ? (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        )}
+      </button>
+
+      <Sidebar
+        usuarioActual={usuarioActual}
+        vistaActual={vistaActual}
+        onCambiarVista={onCambiarVista}
+        onCerrarSesion={onCerrarSesion}
+        abierto={sidebarAbierto}
+        onToggle={onToggleSidebar}
+        esMaster={esMaster}
+        licenciaActiva={licenciaActiva}
+        diasRestantes={diasRestantes}
+      />
+
+      <div className="md:ml-64">
+        {renderVista()}
+      </div>
+    </div>
   );
 }
 

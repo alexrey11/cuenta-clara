@@ -1,7 +1,7 @@
-// ============ src/Devoluciones.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Venta, Devolucion, Usuario } from './db';
+import { usePDV } from './contexts/PuntoDeVentaContext';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     input, label, sectionTitle,
@@ -12,6 +12,7 @@ import {
 interface DevolucionesProps { usuarioActual: Usuario; }
 
 export default function Devoluciones({ usuarioActual }: DevolucionesProps) {
+    const { pdvActivo, modoTodos } = usePDV();
     const [ventas, setVentas] = useState<Venta[]>([]);
     const [devoluciones, setDevoluciones] = useState<Devolucion[]>([]);
     const [modalAbierto, setModalAbierto] = useState(false);
@@ -20,15 +21,26 @@ export default function Devoluciones({ usuarioActual }: DevolucionesProps) {
     const [motivo, setMotivo] = useState('');
     const [busqueda, setBusqueda] = useState('');
 
-    useEffect(() => { cargarDatos(); }, []);
+    useEffect(() => { cargarDatos(); }, [pdvActivo?.id, modoTodos]);
 
     const cargarDatos = async () => {
-        const [v, d] = await Promise.all([
-            db.ventas.where('estado').equals('completada').toArray(),
-            db.devoluciones.toArray(),
-        ]);
-        setVentas(v);
-        setDevoluciones(d.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
+        let ventasFiltradas: Venta[];
+        let devsFiltradas: Devolucion[];
+
+        if (modoTodos) {
+            ventasFiltradas = await db.ventas.where('estado').equals('completada').toArray();
+            devsFiltradas = await db.devoluciones.toArray();
+        } else if (pdvActivo) {
+            ventasFiltradas = await db.ventas.where('puntoDeVentaId').equals(pdvActivo.id!).toArray();
+            ventasFiltradas = ventasFiltradas.filter(v => v.estado === 'completada');
+            devsFiltradas = await db.devoluciones.where('puntoDeVentaId').equals(pdvActivo.id!).toArray();
+        } else {
+            ventasFiltradas = [];
+            devsFiltradas = [];
+        }
+
+        setVentas(ventasFiltradas);
+        setDevoluciones(devsFiltradas.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()));
     };
 
     const procesarDevolucion = async () => {
@@ -43,10 +55,15 @@ export default function Devoluciones({ usuarioActual }: DevolucionesProps) {
 
         const monto = c * primerItem.precioUnitario;
         await db.devoluciones.add({
-            ventaId: ventaSel.id!, productoId: primerItem.productoId,
-            productoNombre: primerItem.productoNombre, cantidad: c,
-            motivo: motivo.trim(), fecha: new Date(),
-            realizadoPor: usuarioActual.nombre, montoReembolsado: monto,
+            ventaId: ventaSel.id!,
+            productoId: primerItem.productoId,
+            productoNombre: primerItem.productoNombre,
+            cantidad: c,
+            motivo: motivo.trim(),
+            fecha: new Date(),
+            realizadoPor: usuarioActual.nombre,
+            montoReembolsado: monto,
+            puntoDeVentaId: ventaSel.puntoDeVentaId,
         });
 
         if (c === primerItem.cantidad) {
@@ -54,7 +71,8 @@ export default function Devoluciones({ usuarioActual }: DevolucionesProps) {
         } else {
             const nuevaCantidad = primerItem.cantidad - c;
             await db.ventas.update(ventaSel.id!, {
-                cantidad: nuevaCantidad, total: nuevaCantidad * primerItem.precioUnitario,
+                cantidad: nuevaCantidad,
+                total: nuevaCantidad * primerItem.precioUnitario,
             });
         }
 
@@ -97,7 +115,10 @@ export default function Devoluciones({ usuarioActual }: DevolucionesProps) {
                         <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-red-600 text-2xl shadow-md ring-2 ring-white/10 md:flex">🔄</div>
                         <div className="min-w-0">
                             <h1 className={`${titleGradient} truncate text-xl md:text-3xl`}>Devoluciones</h1>
-                            <p className="truncate text-xs text-gray-400 md:text-sm">Procesa devoluciones y repón stock</p>
+                            <p className="truncate text-xs text-gray-400 md:text-sm">
+                                {pdvActivo && `${pdvActivo.icono} ${pdvActivo.nombre.replace(/^[^\s]+\s/, '')}`}
+                                {modoTodos && 'Todos los PDV'}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -134,8 +155,10 @@ export default function Devoluciones({ usuarioActual }: DevolucionesProps) {
                                             </p>
                                             <button
                                                 onClick={() => {
-                                                    setVentaSel(v); setCantDev(getCantidadVenta(v).toString());
-                                                    setMotivo(''); setModalAbierto(true);
+                                                    setVentaSel(v);
+                                                    setCantDev(getCantidadVenta(v).toString());
+                                                    setMotivo('');
+                                                    setModalAbierto(true);
                                                 }}
                                                 className="mt-2 w-full rounded-lg border border-orange-400/30 bg-orange-500/10 px-4 py-2 text-sm font-bold text-orange-300 transition-colors hover:bg-orange-500/20 md:w-auto">
                                                 Devolver

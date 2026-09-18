@@ -3,8 +3,20 @@ import type { Table } from 'dexie';
 
 // ===== INTERFACES =====
 
+export interface PuntoDeVenta {
+    id?: number;
+    nombre: string;
+    direccion?: string;
+    telefono?: string;
+    encargado?: string;
+    icono: string;
+    activo: boolean;
+    creadoEn: Date;
+}
+
 export interface Categoria {
     id?: number;
+    puntoDeVentaId: number;
     nombre: string;
     descripcion?: string;
     imagen?: string;
@@ -13,6 +25,7 @@ export interface Categoria {
 
 export interface Producto {
     id?: number;
+    puntoDeVentaId: number;
     categoriaId: number;
     nombre: string;
     descripcion?: string;
@@ -34,6 +47,8 @@ export interface Usuario {
     rol: 'admin' | 'jefe' | 'vendedor';
     creadoEn: Date;
     comisionPorcentaje?: number;
+    puntosDeVentaIds: number[];
+    activo?: boolean;
 }
 
 export interface Cliente {
@@ -93,6 +108,8 @@ export interface Venta {
     esFiado?: boolean;
     fechaPagoFiado?: Date;
     vueltoCUP?: number;
+    puntoDeVentaId: number;
+    puntoDeVentaNombre: string;
 }
 
 export interface Devolucion {
@@ -105,6 +122,7 @@ export interface Devolucion {
     fecha: Date;
     realizadoPor: string;
     montoReembolsado: number;
+    puntoDeVentaId: number;
 }
 
 export interface MovimientoInventario {
@@ -118,6 +136,7 @@ export interface MovimientoInventario {
     realizadoPor: string;
     stockAnterior: number;
     stockNuevo: number;
+    puntoDeVentaId: number;
 }
 
 export interface CierreCaja {
@@ -136,6 +155,8 @@ export interface CierreCaja {
         tarjeta: number;
         fiado: number;
     };
+    puntoDeVentaId: number;
+    puntoDeVentaNombre: string;
 }
 
 export interface Licencia {
@@ -153,9 +174,7 @@ export interface ConfigEntry {
     value: string;
 }
 
-/** Trazas de seguridad — registro de eventos importantes */
 export type TipoLogSeguridad =
-
     | 'login_ok'
     | 'login_fallido'
     | 'logout'
@@ -175,7 +194,11 @@ export type TipoLogSeguridad =
     | 'categoria_eliminada'
     | 'producto_creado'
     | 'producto_editado'
-    | 'producto_eliminado';
+    | 'producto_eliminado'
+    | 'pdv_creado'
+    | 'pdv_editado'
+    | 'pdv_eliminado'
+    | 'pdv_cambio';
 
 export interface LogSeguridad {
     id?: number;
@@ -202,6 +225,7 @@ export class CuentaClaraDB extends Dexie {
     movimientosInventario!: Table<MovimientoInventario, number>;
     config!: Table<ConfigEntry, string>;
     logsSeguridad!: Table<LogSeguridad, number>;
+    puntosDeVenta!: Table<PuntoDeVenta, number>;
 
     constructor() {
         super('CuentaClaraDB');
@@ -233,7 +257,6 @@ export class CuentaClaraDB extends Dexie {
             config: 'key',
         });
 
-        // v10: agrega logs de seguridad
         this.version(10).stores({
             categorias: '++id, nombre',
             productos: '++id, categoriaId, nombre, stockActual, codigoBarras',
@@ -247,6 +270,54 @@ export class CuentaClaraDB extends Dexie {
             movimientosInventario: '++id, productoId, tipo, fecha',
             config: 'key',
             logsSeguridad: '++id, tipo, fecha, usuarioNombre',
+        });
+
+        // v11: sistema de puntos de venta
+        this.version(11).stores({
+            categorias: '++id, nombre, puntoDeVentaId',
+            productos: '++id, categoriaId, nombre, stockActual, codigoBarras, puntoDeVentaId',
+            ventas: '++id, fecha, vendedorId, estado, clienteId, puntoDeVentaId',
+            usuarios: '++id, nombre, pin, rol',
+            cierres: '++id, fecha, realizadoPor, puntoDeVentaId',
+            licencias: '++id, codigo, cliente, estado',
+            clientes: '++id, nombre, telefono, saldoPendiente',
+            tasasCambio: '++id, moneda',
+            devoluciones: '++id, ventaId, productoId, fecha, puntoDeVentaId',
+            movimientosInventario: '++id, productoId, tipo, fecha, puntoDeVentaId',
+            config: 'key',
+            logsSeguridad: '++id, tipo, fecha, usuarioNombre',
+            puntosDeVenta: '++id, nombre, activo',
+        }).upgrade(async (tx) => {
+            // Migración: crear PDV "Principal" y asignar todos los datos existentes
+            const ahora = new Date();
+            const pdvId = await tx.table('puntosDeVenta').add({
+                nombre: '🏪 Principal',
+                direccion: undefined,
+                telefono: undefined,
+                encargado: undefined,
+                icono: '🏪',
+                activo: true,
+                creadoEn: ahora,
+            });
+
+            // Actualizar todos los registros existentes
+            await tx.table('categorias').toCollection().modify({ puntoDeVentaId: pdvId });
+            await tx.table('productos').toCollection().modify({ puntoDeVentaId: pdvId });
+            await tx.table('ventas').toCollection().modify({
+                puntoDeVentaId: pdvId,
+                puntoDeVentaNombre: '🏪 Principal',
+            });
+            await tx.table('devoluciones').toCollection().modify({ puntoDeVentaId: pdvId });
+            await tx.table('movimientosInventario').toCollection().modify({ puntoDeVentaId: pdvId });
+            await tx.table('cierres').toCollection().modify({
+                puntoDeVentaId: pdvId,
+                puntoDeVentaNombre: '🏪 Principal',
+            });
+
+            // Actualizar usuarios: asignar el PDV a todos
+            await tx.table('usuarios').toCollection().modify((u: any) => {
+                u.puntosDeVentaIds = [pdvId];
+            });
         });
     }
 }
@@ -270,4 +341,12 @@ export const calcularComision = async (venta: Venta): Promise<number> => {
     const vendedor = await db.usuarios.get(venta.vendedorId);
     if (!vendedor || !vendedor.comisionPorcentaje) return 0;
     return venta.total * (vendedor.comisionPorcentaje / 100);
+};
+
+/** ¿Un usuario tiene acceso a un punto de venta? */
+export const tieneAccesoAPDV = (usuario: Usuario, pdvId: number): boolean => {
+    // Admin y jefe ven todos los PDV
+    if (usuario.rol === 'admin' || usuario.rol === 'jefe') return true;
+    // Vendedor solo los que tiene asignados
+    return usuario.puntosDeVentaIds?.includes(pdvId) ?? false;
 };
