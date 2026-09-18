@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Producto, Venta, Usuario, Cliente, TasaCambio, MetodoPago, ItemCarrito } from './db';
-import { escanearConCamara, onScanBluetooth, iniciarEscuchaBluetooth } from './utils/scanner';
+import { onScanBluetooth, iniciarEscuchaBluetooth } from './utils/scanner';
+import EscanerCamara from './components/EscanerCamara';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     input, label, sectionTitle, btnSecondary,
@@ -27,8 +28,8 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     const [modalCancelacion, setModalCancelacion] = useState<{ abierto: boolean; venta: Venta | null }>({ abierto: false, venta: null });
     const [razonCancelacion, setRazonCancelacion] = useState('');
     const [mostrarPagoMovil, setMostrarPagoMovil] = useState(false);
-    const [escaneando, setEscaneando] = useState(false);
     const [ultimoEscaneo, setUltimoEscaneo] = useState<string | null>(null);
+    const [mostrarEscaner, setMostrarEscaner] = useState(false);
 
     useEffect(() => { cargarTodo(); }, []);
 
@@ -113,7 +114,6 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
         const limpio = codigo.trim();
         if (!limpio) return;
 
-        // Buscar por código de barras exacto
         const producto = productos.find(p => p.codigoBarras === limpio);
 
         if (producto) {
@@ -126,20 +126,6 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
             setTimeout(() => setUltimoEscaneo(null), 3000);
         }
-    };
-
-    const escanearConCamaraHandler = async () => {
-        setEscaneando(true);
-        try {
-            const codigo = await escanearConCamara();
-            if (codigo) {
-                procesarCodigoEscaneado(codigo);
-            }
-        } catch (e) {
-            console.error(e);
-            alert('No se pudo abrir la cámara. Verifica los permisos.');
-        }
-        setEscaneando(false);
     };
 
     // ===== PAGOS =====
@@ -291,11 +277,10 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                         <div className={`${card} cc-fade-up p-3 md:p-4`}>
                             <div className="mb-3 flex gap-2">
                                 <button
-                                    onClick={escanearConCamaraHandler}
-                                    disabled={escaneando}
-                                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-black text-white shadow-md shadow-emerald-500/25 transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 md:text-base"
+                                    onClick={() => setMostrarEscaner(true)}
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-black text-white shadow-md shadow-emerald-500/25 transition-transform hover:-translate-y-0.5 active:translate-y-0 md:text-base"
                                 >
-                                    {escaneando ? '⏳ Abriendo cámara…' : '📷 Escanear código'}
+                                    📷 Escanear código
                                 </button>
                             </div>
                             <div className="mb-2 flex items-center gap-2 rounded-lg border border-blue-400/15 bg-blue-500/5 px-3 py-2 text-[11px] text-blue-200/80">
@@ -504,6 +489,17 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Modal Escáner de Cámara */}
+            {mostrarEscaner && (
+                <EscanerCamara
+                    onDetectado={(codigo) => {
+                        setMostrarEscaner(false);
+                        procesarCodigoEscaneado(codigo);
+                    }}
+                    onCancelar={() => setMostrarEscaner(false)}
+                />
             )}
         </div>
     );

@@ -1,11 +1,11 @@
 // ============================================================
-// Servicio de escáner: soporta cámara (ML Kit) y Bluetooth HID
+// Servicio de escáner: cámara (ML Kit) y Bluetooth HID
 // ============================================================
 
 import { Capacitor } from '@capacitor/core';
-import { BarcodeScanner } from '@capacitor-mlkit/barcode-scanning';
+import { BarcodeScanner, BarcodeFormat } from '@capacitor-mlkit/barcode-scanning';
 
-// ===== DETECCIÓN DE ESCÁNER BLUETOOTH (KEYBOARD WEDGE) =====
+// ===== BLUETOOTH (HID) =====
 
 let buffer = '';
 let ultimaTeclaTiempo = 0;
@@ -30,25 +30,19 @@ export function iniciarEscuchaBluetooth(): () => void {
     const handler = (e: KeyboardEvent) => {
         const ahora = Date.now();
 
-        if (ahora - ultimaTeclaTiempo > 100) {
-            buffer = '';
-        }
+        if (ahora - ultimaTeclaTiempo > 100) buffer = '';
 
         if (e.key.length === 1) {
             const intervalo = ahora - ultimaTeclaTiempo;
             ultimaTeclaTiempo = ahora;
             buffer += e.key;
-
-            if (intervalo < VELOCIDAD_MINIMA_MS || buffer.length > 8) {
-                e.preventDefault();
-            }
+            if (intervalo < VELOCIDAD_MINIMA_MS || buffer.length > 8) e.preventDefault();
         }
 
         if (e.key === 'Enter' && buffer.length >= 4) {
             const codigo = buffer.trim();
             buffer = '';
             ultimaTeclaTiempo = 0;
-
             if (codigo.length >= 4) {
                 e.preventDefault();
                 listeners.forEach(l => l(codigo));
@@ -73,47 +67,57 @@ export async function pedirPermisoCamara(): Promise<boolean> {
         const { camera: nuevo } = await BarcodeScanner.requestPermissions();
         return nuevo === 'granted';
     } catch (e) {
-        console.error('[scanner] Error pidiendo permiso de cámara:', e);
+        console.error('[scanner] Error pidiendo permiso:', e);
         return false;
     }
 }
 
-export async function escanearConCamara(): Promise<string | null> {
-    try {
-        const permiso = await pedirPermisoCamara();
-        if (!permiso) return null;
+/** Formatos soportados (los más comunes en retail) */
+export const FORMATOS_ESCANEO = [
+    BarcodeFormat.Ean13,
+    BarcodeFormat.Ean8,
+    BarcodeFormat.UpcA,
+    BarcodeFormat.UpcE,
+    BarcodeFormat.Code128,
+    BarcodeFormat.Code39,
+    BarcodeFormat.Code93,
+    BarcodeFormat.Itf,
+    BarcodeFormat.QrCode,
+    BarcodeFormat.DataMatrix,
+    BarcodeFormat.Pdf417,
+    BarcodeFormat.Aztec,
+    BarcodeFormat.Codabar,
+];
 
-        // En Android, verificar que el módulo de Google Barcode Scanner esté instalado
-        if (Capacitor.getPlatform() === 'android') {
-            const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
-
-            if (!available) {
-                // El módulo no está instalado → descargarlo
-                await BarcodeScanner.installGoogleBarcodeScannerModule();
-                // Esperar un momento a que se complete
-                await new Promise(r => setTimeout(r, 1500));
-            }
-        }
-
-        const { barcodes } = await BarcodeScanner.scan();
-
-        if (barcodes.length === 0) return null;
-        return barcodes[0].rawValue || null;
-    } catch (e: any) {
-        console.error('[scanner] Error escaneando:', e);
-
-        const msg = e?.message || String(e);
-        if (msg.includes('Failed to scan code')) {
-            alert(
-                '⚠️ El escáner de Google no está listo.\n\n' +
-                'Conéctate a internet una vez, abre la app y espera 10 segundos. ' +
-                'Después funcionará offline.'
-            );
-        } else if (msg.includes('cancel') || msg.includes('Cancel')) {
-            // El usuario cerró la cámara, no hacemos nada
-        } else {
-            alert(`No se pudo abrir la cámara: ${msg}`);
-        }
-        return null;
+/** Inicia el escaneo en modo overlay (cámara detrás del webview). */
+export async function iniciarEscaneoOverlay(): Promise<() => void> {
+    if (!Capacitor.isNativePlatform()) {
+        throw new Error('El escáner solo funciona en la app instalada.');
     }
+
+    const permiso = await pedirPermisoCamara();
+    if (!permiso) throw new Error('Permiso de cámara denegado');
+
+    // Activar modo transparente
+    document.body.classList.add('scanner-activo');
+
+    // Listener para el primer código
+    const listener = await BarcodeScanner.addListener('barcodesScanned', () => { });
+
+    await BarcodeScanner.startScan({
+        formats: FORMATOS_ESCANEO,
+    });
+
+    // Devolvemos función para detener
+    return async () => {
+        try { await BarcodeScanner.stopScan(); } catch { }
+        try { await listener.remove(); } catch { }
+        document.body.classList.remove('scanner-activo');
+    };
+}
+
+/** Detiene el escaneo y limpia. */
+export async function detenerEscaneo(): Promise<void> {
+    try { await BarcodeScanner.stopScan(); } catch { }
+    document.body.classList.remove('scanner-activo');
 }

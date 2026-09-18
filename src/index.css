@@ -30,3 +30,16 @@ body.scanner-activo #root {
 body.scanner-activo * {
   background-color: transparent !important;
 }
+
+/* Modo escáner: el WebView se vuelve transparente para ver la cámara detrás */
+body.scanner-activo {
+  background: transparent !important;
+}
+
+body.scanner-activo #root {
+  background: transparent !important;
+}
+
+body.scanner-activo #root>div {
+  background: transparent !important;
+}
