@@ -1,7 +1,7 @@
-// ============ src/NuevaVenta.tsx ============
 import { useState, useEffect } from 'react';
 import { db } from './db';
 import type { Producto, Venta, Usuario, Cliente, TasaCambio, MetodoPago, ItemCarrito } from './db';
+import { escanearConCamara, onScanBluetooth, iniciarEscuchaBluetooth } from './utils/scanner';
 import {
     STYLES, BackgroundBlobs, pageWrap, card, cardPadded, titleGradient,
     input, label, sectionTitle, btnSecondary,
@@ -27,8 +27,22 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     const [modalCancelacion, setModalCancelacion] = useState<{ abierto: boolean; venta: Venta | null }>({ abierto: false, venta: null });
     const [razonCancelacion, setRazonCancelacion] = useState('');
     const [mostrarPagoMovil, setMostrarPagoMovil] = useState(false);
+    const [escaneando, setEscaneando] = useState(false);
+    const [ultimoEscaneo, setUltimoEscaneo] = useState<string | null>(null);
 
     useEffect(() => { cargarTodo(); }, []);
+
+    // Escucha global de escáner Bluetooth (HID como teclado)
+    useEffect(() => {
+        const cleanup = iniciarEscuchaBluetooth();
+        const unsub = onScanBluetooth((codigo) => {
+            procesarCodigoEscaneado(codigo);
+        });
+        return () => {
+            if (typeof cleanup === 'function') cleanup();
+            unsub();
+        };
+    }, [productos, carrito]);
 
     const cargarTodo = async () => {
         const [prods, cats, clis, tasasData] = await Promise.all([
@@ -52,27 +66,90 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
     const agregarAlCarrito = (producto: Producto) => {
         const existente = carrito.find(item => item.productoId === producto.id);
         if (existente) {
-            if (existente.cantidad >= producto.stockActual) { alert(`Solo quedan ${producto.stockActual}`); return; }
-            setCarrito(carrito.map(item => item.productoId === producto.id ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precioUnitario } : item));
+            if (existente.cantidad >= producto.stockActual) {
+                alert(`Solo quedan ${producto.stockActual}`);
+                return;
+            }
+            setCarrito(carrito.map(item => item.productoId === producto.id
+                ? { ...item, cantidad: item.cantidad + 1, subtotal: (item.cantidad + 1) * item.precioUnitario }
+                : item));
         } else {
             const pv = producto.precioVenta || 0;
-            setCarrito([...carrito, { productoId: producto.id!, productoNombre: producto.nombre, codigoBarras: producto.codigoBarras, cantidad: 1, precioUnitario: pv, precioCompra: producto.precioCompra || 0, subtotal: pv }]);
+            setCarrito([...carrito, {
+                productoId: producto.id!,
+                productoNombre: producto.nombre,
+                codigoBarras: producto.codigoBarras,
+                cantidad: 1,
+                precioUnitario: pv,
+                precioCompra: producto.precioCompra || 0,
+                subtotal: pv,
+            }]);
         }
     };
 
     const cambiarCantidad = (productoId: number, nuevaCantidad: number) => {
         const producto = productos.find(p => p.id === productoId);
         if (!producto) return;
-        if (nuevaCantidad > producto.stockActual) { alert(`Solo quedan ${producto.stockActual}`); return; }
-        if (nuevaCantidad <= 0) setCarrito(carrito.filter(item => item.productoId !== productoId));
-        else setCarrito(carrito.map(item => item.productoId === productoId ? { ...item, cantidad: nuevaCantidad, subtotal: nuevaCantidad * item.precioUnitario } : item));
+        if (nuevaCantidad > producto.stockActual) {
+            alert(`Solo quedan ${producto.stockActual}`);
+            return;
+        }
+        if (nuevaCantidad <= 0) {
+            setCarrito(carrito.filter(item => item.productoId !== productoId));
+        } else {
+            setCarrito(carrito.map(item => item.productoId === productoId
+                ? { ...item, cantidad: nuevaCantidad, subtotal: nuevaCantidad * item.precioUnitario }
+                : item));
+        }
     };
 
-    const eliminarDelCarrito = (productoId: number) => setCarrito(carrito.filter(item => item.productoId !== productoId));
+    const eliminarDelCarrito = (productoId: number) => {
+        setCarrito(carrito.filter(item => item.productoId !== productoId));
+    };
+
+    // ===== ESCÁNER =====
+
+    const procesarCodigoEscaneado = (codigo: string) => {
+        const limpio = codigo.trim();
+        if (!limpio) return;
+
+        // Buscar por código de barras exacto
+        const producto = productos.find(p => p.codigoBarras === limpio);
+
+        if (producto) {
+            agregarAlCarrito(producto);
+            setUltimoEscaneo(`✅ ${producto.nombre} agregado`);
+            if (navigator.vibrate) navigator.vibrate(50);
+            setTimeout(() => setUltimoEscaneo(null), 2000);
+        } else {
+            setUltimoEscaneo(`❌ Código no registrado: ${limpio}`);
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            setTimeout(() => setUltimoEscaneo(null), 3000);
+        }
+    };
+
+    const escanearConCamaraHandler = async () => {
+        setEscaneando(true);
+        try {
+            const codigo = await escanearConCamara();
+            if (codigo) {
+                procesarCodigoEscaneado(codigo);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('No se pudo abrir la cámara. Verifica los permisos.');
+        }
+        setEscaneando(false);
+    };
+
+    // ===== PAGOS =====
+
     const totalPagadoCUP = metodosPago.reduce((sum, mp) => sum + mp.montoEnCUP, 0);
     const vuelto = totalPagadoCUP - totalCarrito;
     const agregarMetodoPago = () => setMetodosPago([...metodosPago, { tipo: 'efectivo', monto: 0, moneda: 'CUP', montoEnCUP: 0 }]);
-    const eliminarMetodoPago = (index: number) => { if (metodosPago.length > 1) setMetodosPago(metodosPago.filter((_, i) => i !== index)); };
+    const eliminarMetodoPago = (index: number) => {
+        if (metodosPago.length > 1) setMetodosPago(metodosPago.filter((_, i) => i !== index));
+    };
 
     const actualizarMetodoPago = (index: number, campo: keyof MetodoPago, valor: any) => {
         const nuevos = [...metodosPago];
@@ -83,21 +160,36 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
 
     const registrarVenta = async () => {
         if (carrito.length === 0) { alert('Carrito vacío'); return; }
-        if (!esFiado && totalPagadoCUP < totalCarrito) { alert(`Faltan $${(totalCarrito - totalPagadoCUP).toFixed(2)}`); return; }
+        if (!esFiado && totalPagadoCUP < totalCarrito) {
+            alert(`Faltan $${(totalCarrito - totalPagadoCUP).toFixed(2)}`);
+            return;
+        }
         const vendedor = await db.usuarios.get(usuarioActual.id!);
         const comision = vendedor?.comisionPorcentaje ? totalCarrito * (vendedor.comisionPorcentaje / 100) : 0;
         await db.ventas.add({
-            items: carrito, total: totalCarrito, fecha: new Date(),
-            vendedorId: usuarioActual.id!, vendedorNombre: usuarioActual.nombre, estado: 'completada',
+            items: carrito,
+            total: totalCarrito,
+            fecha: new Date(),
+            vendedorId: usuarioActual.id!,
+            vendedorNombre: usuarioActual.nombre,
+            estado: 'completada',
             metodosPago: esFiado ? [{ tipo: 'fiado', monto: totalCarrito, moneda: 'CUP', montoEnCUP: totalCarrito }] : metodosPago,
-            notas: notasVenta || undefined, comisionVendedor: comision, esFiado,
-            clienteId: clienteSeleccionado?.id, clienteNombre: clienteSeleccionado?.nombre, vueltoCUP: vuelto > 0 ? vuelto : 0,
+            notas: notasVenta || undefined,
+            comisionVendedor: comision,
+            esFiado,
+            clienteId: clienteSeleccionado?.id,
+            clienteNombre: clienteSeleccionado?.nombre,
+            vueltoCUP: vuelto > 0 ? vuelto : 0,
         });
         for (const item of carrito) {
             const prod = await db.productos.get(item.productoId);
             if (prod) await db.productos.update(prod.id!, { stockActual: prod.stockActual - item.cantidad });
         }
-        if (esFiado && clienteSeleccionado) await db.clientes.update(clienteSeleccionado.id!, { saldoPendiente: clienteSeleccionado.saldoPendiente + totalCarrito });
+        if (esFiado && clienteSeleccionado) {
+            await db.clientes.update(clienteSeleccionado.id!, {
+                saldoPendiente: clienteSeleccionado.saldoPendiente + totalCarrito,
+            });
+        }
         let msg = `✅ Venta: $${totalCarrito.toFixed(2)} CUP`;
         if (vuelto > 0) {
             msg += `\n💰 VUELTO: $${vuelto.toFixed(2)} CUP`;
@@ -105,15 +197,23 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
             if (mpUSD) msg += `\n💵 O $${(vuelto / obtenerTasa('USD')).toFixed(2)} USD`;
         }
         alert(msg);
-        setCarrito([]); setMetodosPago([{ tipo: 'efectivo', monto: 0, moneda: 'CUP', montoEnCUP: 0 }]);
-        setNotasVenta(''); setEsFiado(false); setClienteSeleccionado(null); setMostrarPagoMovil(false); cargarTodo();
+        setCarrito([]);
+        setMetodosPago([{ tipo: 'efectivo', monto: 0, moneda: 'CUP', montoEnCUP: 0 }]);
+        setNotasVenta('');
+        setEsFiado(false);
+        setClienteSeleccionado(null);
+        setMostrarPagoMovil(false);
+        cargarTodo();
     };
 
     const cancelarVenta = async () => {
         if (!modalCancelacion.venta || !razonCancelacion.trim()) { alert('Escribe motivo'); return; }
         const v = modalCancelacion.venta;
-        if (usuarioActual.rol === 'admin') await db.ventas.delete(v.id!);
-        else await db.ventas.update(v.id!, { estado: 'error', notaCancelacion: razonCancelacion.trim() });
+        if (usuarioActual.rol === 'admin') {
+            await db.ventas.delete(v.id!);
+        } else {
+            await db.ventas.update(v.id!, { estado: 'error', notaCancelacion: razonCancelacion.trim() });
+        }
         const items = v.items && v.items.length > 0 ? v.items : [{ productoId: v.productoId || 0, cantidad: v.cantidad || 1 }];
         for (const item of items) {
             const prod = await db.productos.get(item.productoId);
@@ -123,7 +223,9 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
             const cli = await db.clientes.get(v.clienteId);
             if (cli) await db.clientes.update(cli.id!, { saldoPendiente: Math.max(0, cli.saldoPendiente - v.total) });
         }
-        setModalCancelacion({ abierto: false, venta: null }); setRazonCancelacion(''); cargarTodo();
+        setModalCancelacion({ abierto: false, venta: null });
+        setRazonCancelacion('');
+        cargarTodo();
     };
 
     const productosFiltrados = productos.filter(p => {
@@ -158,6 +260,16 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                     </div>
                 </div>
 
+                {/* Aviso de último escaneo */}
+                {ultimoEscaneo && (
+                    <div className={`cc-fade-up mb-3 rounded-xl border p-3 text-sm font-bold ${ultimoEscaneo.startsWith('✅')
+                        ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
+                        : 'border-rose-400/25 bg-rose-500/10 text-rose-300'
+                        }`}>
+                        {ultimoEscaneo}
+                    </div>
+                )}
+
                 {/* Barra flotante móvil (carrito) */}
                 {carrito.length > 0 && !mostrarPagoMovil && (
                     <div className="fixed bottom-0 left-0 right-0 z-30 flex items-center justify-between border-t border-white/10 bg-gradient-to-r from-blue-600 to-indigo-600 p-3 text-white shadow-2xl lg:hidden">
@@ -175,12 +287,27 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                 <div className="grid grid-cols-1 gap-4 pb-20 lg:grid-cols-3 lg:gap-6 lg:pb-0">
                     {/* Productos */}
                     <div className="space-y-4 lg:col-span-2 lg:space-y-6">
+                        {/* Búsqueda + Escáner */}
                         <div className={`${card} cc-fade-up p-3 md:p-4`}>
+                            <div className="mb-3 flex gap-2">
+                                <button
+                                    onClick={escanearConCamaraHandler}
+                                    disabled={escaneando}
+                                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 text-sm font-black text-white shadow-md shadow-emerald-500/25 transition-transform hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 md:text-base"
+                                >
+                                    {escaneando ? '⏳ Abriendo cámara…' : '📷 Escanear código'}
+                                </button>
+                            </div>
+                            <div className="mb-2 flex items-center gap-2 rounded-lg border border-blue-400/15 bg-blue-500/5 px-3 py-2 text-[11px] text-blue-200/80">
+                                <span>🔫</span>
+                                <span>Escáner Bluetooth activo: apunta y dispara</span>
+                            </div>
                             <div className="flex flex-col gap-2 md:flex-row">
                                 <input type="text" placeholder="🔍 Buscar producto o código..."
                                     value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
                                     className={`${input} md:flex-1`} />
-                                <select value={filtroCategoria} onChange={(e) => setFiltroCategoria(e.target.value === 'todas' ? 'todas' : parseInt(e.target.value))}
+                                <select value={filtroCategoria}
+                                    onChange={(e) => setFiltroCategoria(e.target.value === 'todas' ? 'todas' : parseInt(e.target.value))}
                                     className={`${input} md:w-56`}>
                                     <option value="todas">Todas las categorías</option>
                                     {categorias.map(cat => <option key={cat.id} value={cat.id}>{cat.nombre}</option>)}
@@ -188,6 +315,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                             </div>
                         </div>
 
+                        {/* Lista de productos */}
                         <div className={`${card} cc-fade-up p-3 md:p-5`}>
                             <h2 className={`${sectionTitle} mb-3 md:mb-4`}>Productos ({productosFiltrados.length})</h2>
                             {productosFiltrados.length === 0 ? (
@@ -212,13 +340,14 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
 
                     {/* Carrito + Pago */}
                     <div className={`${mostrarPagoMovil ? 'block' : 'hidden lg:block'} space-y-4 lg:space-y-6`}>
+                        {/* Carrito */}
                         <div className={`${card} p-4 md:p-5`}>
                             <div className="mb-3 flex items-center justify-between md:mb-4">
                                 <h2 className={sectionTitle}>🛒 Carrito ({carrito.length})</h2>
                                 <button onClick={() => setMostrarPagoMovil(false)} className="text-2xl text-gray-400 hover:text-white lg:hidden">✕</button>
                             </div>
                             {carrito.length === 0 ? (
-                                <p className="py-8 text-center text-sm text-gray-500">Vacío · Toca un producto para agregar</p>
+                                <p className="py-8 text-center text-sm text-gray-500">Vacío · Toca un producto o escanea</p>
                             ) : (
                                 <div className="mb-4 space-y-2">
                                     {carrito.map((item) => (
@@ -247,14 +376,21 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                             </div>
                         </div>
 
+                        {/* Pago */}
                         <div className={`${card} p-4 md:p-5`}>
                             <h2 className={`${sectionTitle} mb-3 md:mb-4`}>💰 Pago</h2>
 
                             <div className="mb-4">
                                 <label className={label}>👤 Cliente</label>
-                                <select value={clienteSeleccionado?.id || ''} onChange={(e) => setClienteSeleccionado(clientes.find(c => c.id === parseInt(e.target.value)) || null)} className={input}>
+                                <select value={clienteSeleccionado?.id || ''}
+                                    onChange={(e) => setClienteSeleccionado(clientes.find(c => c.id === parseInt(e.target.value)) || null)}
+                                    className={input}>
                                     <option value="">Venta rápida (sin cliente)</option>
-                                    {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre} {c.saldoPendiente > 0 ? `(Debe $${c.saldoPendiente.toFixed(0)})` : ''}</option>)}
+                                    {clientes.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.nombre} {c.saldoPendiente > 0 ? `(Debe $${c.saldoPendiente.toFixed(0)})` : ''}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
@@ -336,6 +472,7 @@ export default function NuevaVenta({ onVolver, usuarioActual, onCerrarSesion }: 
                 </div>
             </div>
 
+            {/* Modal Cancelación */}
             {modalCancelacion.abierto && modalCancelacion.venta && (
                 <div className={modalOverlay}>
                     <div className={modalPanel}>

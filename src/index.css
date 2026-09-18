@@ -16,3 +16,17 @@ body {
   background-color: #111827;
   color: #f3f4f6;
 }
+
+/* Cuando el escáner de cámara está activo, el webview se vuelve transparente
+   para que la cámara se vea detrás */
+body.scanner-activo {
+  background: transparent !important;
+}
+
+body.scanner-activo #root {
+  background: transparent !important;
+}
+
+body.scanner-activo * {
+  background-color: transparent !important;
+}
